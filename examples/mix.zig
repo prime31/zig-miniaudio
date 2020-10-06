@@ -1,6 +1,5 @@
 const std = @import("std");
 const ma = @import("miniaudio");
-const c = @cImport(@cInclude("miniaudio.h"));
 
 pub fn main() !void {
     var device = std.mem.zeroes(ma.ma_device);
@@ -38,17 +37,10 @@ pub fn main() !void {
     }
 
     std.time.sleep(std.time.ns_per_s * 3);
-    std.debug.print("---- done ----\n", .{});
 }
 
 fn dataCallback(device: ?*ma.ma_device, out: ?*c_void, input: ?*const c_void, frame_count: ma.ma_uint32) callconv(.C) void {
     var decoder = @intToPtr(*ma.ma_decoder, @ptrToInt(device.?.pUserData.?));
 
-    // const frames_read = ma.ma_decoder_read_pcm_frames(decoder, out, frame_count);
-    // if (frames_read < frame_count) {
-    //     std.debug.print("read: {}\n", .{frames_read});
-    //     _ = ma.ma_decoder_seek_to_pcm_frame(decoder, 0);
-    // }
-
-    _ = ma.ma_data_source_read_pcm_frames(decoder, out, frame_count, null, 1);
+    _ = ma.ma_decoder_read_pcm_frames(decoder, out, frame_count);
 }

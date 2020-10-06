@@ -1,7 +1,5 @@
 const std = @import("std");
 const ma = @import("miniaudio");
-const c = @cImport(@cInclude("miniaudio.h"));
-
 
 pub fn main() !void {
     var sin_waveform = std.mem.zeroes(ma.ma_waveform);

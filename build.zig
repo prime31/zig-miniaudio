@@ -12,8 +12,8 @@ pub fn build(b: *std.build.Builder) anyerror!void {
     const target = b.standardTargetOptions(.{});
 
     const examples = [_][2][]const u8{
-        [_][]const u8{ "mix", "examples/mix.zig" },
         [_][]const u8{ "play_file", "examples/play_file.zig" },
+        [_][]const u8{ "mix", "examples/mix.zig" },
         [_][]const u8{ "simple", "examples/simple.zig" },
     };
 
