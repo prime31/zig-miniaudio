@@ -6,10 +6,10 @@ pub fn main() !void {
     var decoder = std.mem.zeroes(ma.ma_decoder);
     var res: ma.ma_result = 0;
 
-    res = ma.ma_decoder_init_file("examples/assets/clearday.mp3", null, &decoder);
+    // res = ma.ma_decoder_init_file("examples/assets/clearday.mp3", null, &decoder);
     // res = ma.ma_decoder_init_file_wav("examples/assets/clang-beat.wav", null, &decoder);
     // res = ma.ma_decoder_init_file_wav("examples/assets/clang.wav", null, &decoder);
-    // res = ma.ma_decoder_init_file_wav("examples/assets/loop.wav", null, &decoder);
+    res = ma.ma_decoder_init_file_wav("examples/assets/loop.wav", null, &decoder);
     defer _ = ma.ma_decoder_uninit(&decoder);
     if (res != 0) {
         std.debug.print("error: {}\n", .{res});
@@ -22,6 +22,8 @@ pub fn main() !void {
     device_config.sampleRate = decoder.outputSampleRate;
     device_config.dataCallback = dataCallback;
     device_config.pUserData = &decoder;
+
+    std.debug.print("{}, {}\n", .{decoder.outputFormat, decoder.outputSampleRate});
 
     res = ma.ma_device_init(null, &device_config, &device);
     defer ma.ma_device_uninit(&device);
@@ -47,6 +49,5 @@ fn dataCallback(device: ?*ma.ma_device, out: ?*c_void, input: ?*const c_void, fr
     //     std.debug.print("read: {}\n", .{frames_read});
     //     _ = ma.ma_decoder_seek_to_pcm_frame(decoder, 0);
     // }
-
     _ = ma.ma_data_source_read_pcm_frames(decoder, out, frame_count, null, 1);
 }
