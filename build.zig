@@ -12,6 +12,7 @@ pub fn build(b: *std.build.Builder) anyerror!void {
     const target = b.standardTargetOptions(.{});
 
     const examples = [_][2][]const u8{
+        [_][]const u8{ "engine_simple", "examples/engine_simple.zig" },
         [_][]const u8{ "play_file", "examples/play_file.zig" },
         [_][]const u8{ "mix", "examples/mix.zig" },
         [_][]const u8{ "simple", "examples/simple.zig" },
@@ -55,9 +56,12 @@ pub fn linkArtifact(b: *Builder, exe: *std.build.LibExeObjStep, target: std.buil
     }
 
     exe.addIncludeDir("miniaudio/extras/miniaudio_split");
+    exe.addIncludeDir("miniaudio/research");
 
-    const cflags = &[_][]const u8{ "-Wextra", "-Wpedantic", "-std=c89", "-DMA_NO_FLAC", "-DMA_NO_WEBAUDIO", "-DMA_NO_ENCODING" };
-    exe.addCSourceFile("src/miniaudio.c", cflags);
+    // for some reason, gcc compiled miniaudio works and zig compiled doesnt...
+    exe.addObjectFile("src/miniaudio.o");
+    // const cflags = &[_][]const u8{ "-DMA_NO_FLAC", "-DMA_NO_WEBAUDIO", "-DMA_NO_ENCODING" };
+    // exe.addCSourceFile("src/miniaudio.c", cflags);
 
     exe.addPackagePath("miniaudio", std.fs.path.join(b.allocator, &[_][]const u8{ "src/miniaudio.zig" }) catch unreachable);
 }
