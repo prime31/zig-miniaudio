@@ -2,10 +2,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "lldb Debug ecs binary",
+            "name": "lldb Debug engine_simple binary",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/zig-cache/bin/ecs",
+            "program": "${workspaceFolder}/zig-cache/bin/engine_simple",
             "args": [],
             "preLaunchTask": "Build Project",
         }
