@@ -3,8 +3,8 @@ const std = @import("std");
 const Builder = std.build.Builder;
 
 // hacks. if miniaudio is compiled into the zig executable it segfaults
-const build_type: enum { exe, static } = .exe;
-const compile_type: enum { pre_compiled, compiled } = .pre_compiled;
+const build_type: enum { exe, static } = .static;
+const compile_type: enum { pre_compiled, compiled } = .compiled;
 
 pub fn build(b: *std.build.Builder) anyerror!void {
     const target = b.standardTargetOptions(.{});
@@ -26,7 +26,7 @@ pub fn build(b: *std.build.Builder) anyerror!void {
 
         if (build_type == .static) {
             const lib = b.addStaticLibrary("miniaudio", null);
-            lib.setBuildMode(b.standardReleaseOptions());
+            lib.setBuildMode(std.builtin.Mode.ReleaseFast);
             lib.setTarget(target);
 
             linkArtifact(b, lib, target);

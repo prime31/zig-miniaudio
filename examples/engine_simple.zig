@@ -2,228 +2,64 @@ const std = @import("std");
 const ma = @import("miniaudio");
 const wtf = @import("../src/tmp.zig");
 
-const LoadedNotification = struct {
-    cb: ma.ma_async_notification_callbacks = .{ .onSignal = null },
-    sound: ?*ma.ma_sound = null,
-
-    pub fn init(sound: *ma.ma_sound, onSignal: fn (?*ma.ma_async_notification, c_int) callconv(.C) void) LoadedNotification {
-        var note = LoadedNotification{ .sound = sound };
-        note.cb.onSignal = onSignal;
-        return note;
-    }
-};
-
-pub const AudioEngine = struct {
-    engine: *ma.ma_engine,
-
-    pub fn init() !AudioEngine {
-        return initWithOptions(null);
-    }
-
-    pub fn initWithOptions(config: ?*ma.ma_engine_config) !AudioEngine {
-        var engine = try std.testing.allocator.create(ma.ma_engine);
-
-        const res = ma.ma_engine_init(config, engine);
-        if (res == ma.MA_SUCCESS)
-            return AudioEngine{ .engine = engine };
-
-        std.testing.allocator.destroy(engine);
-        return errorForResult(res);
-    }
-
-    pub fn deinit(self: *@This()) void {
-        ma.ma_engine_uninit(self.engine);
-        std.testing.allocator.destroy(self.engine);
-    }
-
-    pub fn playOneShot(self: *@This(), path: [*c]const u8) !void {
-        const res = ma.ma_engine_play_sound(self.engine, path, null);
-        if (res == ma.MA_SUCCESS) return;
-
-        return errorForResult(res);
-    }
-
-    pub fn initSoundFromFile(self: *@This(), path: [*c]const u8) !Sound {
-        return Sound.initFromFile(self, path);
-    }
-
-    pub fn initSoundFromDataSource(self: *@This(), data_source: *ma.ma_data_source, flags: ma.ma_unit32) !Sound {
-        return Sound.initFromDataSource(self, data_source, flags);
-    }
-};
-
-pub const Sound = struct {
-    sound: *ma.ma_sound,
-
-    pub fn initFromFile(engine: *AudioEngine, path: [*c]const u8) !Sound {
-        var sound = try std.testing.allocator.create(ma.ma_sound);
-
-        const res = ma.ma_sound_init_from_file(engine.engine, path, ma.MA_DATA_SOURCE_FLAG_DECODE, null, null, sound);
-        if (res == ma.MA_SUCCESS) {
-            return Sound{ .sound = sound };
-        }
-
-        std.testing.allocator.destroy(sound);
-        return errorForResult(res);
-    }
-
-    pub fn initFromDataSource(engine: *AudioEngine, data_source: *ma.ma_data_source, flags: ma.ma_unit32) !Sound {
-        var sound = try std.testing.allocator.create(ma.ma_sound);
-
-        const res = ma.init_from_data_source(engine.engine, data_source, flags, null, sound);
-        if (res == ma.MA_SUCCESS) {
-            return Sound{ .sound = sound };
-        }
-
-        std.testing.allocator.destroy(sound);
-        return errorForResult(res);
-    }
-
-    pub fn deinit(self: @This()) void {
-        ma.ma_sound_uninit(self.sound);
-        std.testing.allocator.destroy(self.sound);
-    }
-
-    pub fn isPlaying(self: @This()) bool {
-        return self.sound.isPlaying == 1;
-    }
-
-    pub fn isAtEnd(self: @This()) bool {
-        return self.sound.atEnd == 1;
-    }
-
-    pub fn isLooping(self: @This()) bool {
-        return self.sound.isLooping == 1;
-    }
-
-    pub fn start(self: *@This()) !void {
-        const res = ma.ma_sound_start(self.sound);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn stop(self: *@This()) !void {
-        const res = ma.ma_sound_start(self.sound);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setVolume(self: *@This(), volume: f32) !void {
-        const res = ma.ma_sound_set_volume(self.sound, volume);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setGainDb(self: *@This(), gain_db: f32) !void {
-        const res = ma.ma_sound_set_gain_db(self.sound, gain_db);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setEffect(self: *@This(), effect: *ma.ma_effect) !void {
-        const res = ma.ma_sound_set_effect(self.sound, effect);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setPan(self: *@This(), pan: f32) !void {
-        const res = ma.ma_sound_set_pan(self.sound, pan);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setPitch(self: *@This(), pitch: f32) !void {
-        const res = ma.ma_sound_set_pitch(self.sound, pitch);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setPosition(self: *@This(), position: ma.vec3) !void {
-        const res = ma.ma_sound_set_position(self.sound, position);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setLooping(self: *@This(), looping: bool) !void {
-        const res = ma.ma_sound_set_looping(self.sound, if (looping) 1 else 0);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setFadePointInFrames(self: *@This(), fade_point_index: c_uint, volume_beg: f32, volume_end: f32, time_in_frames_beg: c_ulonglong, time_in_frames_end: c_ulonglong) !void {
-        const res = ma.ma_sound_set_fade_point_in_frames(self.sound, fade_point_index, volume_beg, volume_end, time_in_frames_beg, time_in_frames_end);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setFadePointInMilliseconds(self: *@This(), fade_point_index: c_uint, volume_beg: f32, volume_end: f32, time_in_ms_beg: c_ulonglong, time_in_ms_end: c_ulonglong) !void {
-        const res = ma.ma_sound_set_fade_point_in_milliseconds(self.sound, fade_point_index, volume_beg, volume_end, time_in_ms_beg, time_in_ms_end);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setFadePointAutoReset(self: *@This(), fade_point_index: c_uint, auto_reset: bool) !void {
-        const res = ma.ma_sound_set_fade_point_auto_reset(self.sound, fade_point_index, if (auto_reset) 1 else 0);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setStartDelay(self: *@This(), delay_in_ms: c_ulonglong) !void {
-        const res = ma.ma_sound_set_start_delay(self.sound, delay);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn setStopDelay(self: *@This(), delay_in_ms: c_ulonglong) !void {
-        const res = ma.ma_sound_set_stop_delay(self.sound, delay_in_ms);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn getTimeInFrames(self: *@This(), delay_in_ms: c_ulonglong) !c_ulonglong {
-        var time: c_ulonglong = undefined;
-        const res = ma.ma_sound_get_time_in_frames(self.sound, &time);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-        return time;
-    }
-
-    pub fn seekToPcmFrame(self: *@This(), frame_index: c_ulonglong) !void {
-        const res = ma.ma_sound_seek_to_pcm_frame(self.sound, frame_index);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    // MA_API ma_result ma_sound_get_data_format(ma_sound* pSound, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate);
-    pub fn getDataFormat(self: *@This()) !void {
-        @compileError("not imp");
-        const res = ma.ma_sound_get_data_format(self.sound, delay_in_ms);
-        if (res != ma.MA_SUCCESS) return errorForResult(res);
-    }
-
-    pub fn getCursorInPcmFrames(self: *@This()) !c_ulonglong {
-        var cursor: c_ulonglong = undefined;
-        const res = ma.ma_sound_get_cursor_in_pcm_frames(self.sound, &cursor);
-        if (res == ma.MA_SUCCESS) return cursor;
-        return errorForResult(res);
-    }
-
-    pub fn getLengthInPcmFrames(self: *@This()) !c_ulonglong {
-        var length: c_ulonglong = undefined;
-        const res = ma.ma_sound_get_length_in_pcm_frames(self.sound, &length);
-        if (res == ma.MA_SUCCESS) return length;
-        return errorForResult(res);
-    }
-};
-
-fn errorForResult(res: ma.ma_result) anyerror {
-    std.debug.print("----- fucker: {}\n", .{res});
-    return switch (res) {
-        else => error.Unknown,
-    };
-}
+const AudioEngine = @import("miniaudio").AudioEngine;
+const SoundGroup = @import("miniaudio").SoundGroup;
+const Sound = @import("miniaudio").Sound;
 
 pub fn main() !void {
     std.debug.print("engine size: {}, resource size: {}, device size: {}\n", .{ @sizeOf(ma.ma_engine), @sizeOf(ma.ma_resource_manager), @sizeOf(ma.ma_device) });
 
-    var e = try AudioEngine.init(); defer e.deinit();
+    var e = try AudioEngine.init();
+    defer e.deinit();
+    var master_grp = SoundGroup{ .group = e.getMasterSoundGroup() };
+
+    e.setVolume(0.15);
     try e.playOneShot("examples/assets/clang.wav");
 
-    var snd = try e.initSoundFromFile("examples/assets/loop.wav"); defer snd.deinit();
-    try snd.start();
+    var grp = try e.initSoundGroup();
+    defer grp.deinit();
+
+    var sndo = try e.initSoundWithOptions("examples/assets/clang-beat.wav", .{
+        .stream = true,
+        .group = grp,
+    });
+    defer sndo.deinit();
+    sndo.setFadePointInMilliseconds(0, 0, 0.3, 0, 1000);
+    sndo.start();
+
+    std.debug.print("group. playing: {}, volume: {}, time: {}\n", .{ grp.isPlaying(), grp.getVolume(), grp.getTimeInFrames() });
+
+    var snd = try e.initSound("examples/assets/loop.wav");
+    defer snd.deinit();
+    snd.setLooping(true);
+    snd.start();
+
+    std.debug.print("\ng: quit\nm: play music\nb: play clang-beat\nc: play clang\nv: lower loop volume\n", .{});
 
     const stdin = std.io.getStdIn().reader();
     var c: [1]u8 = undefined;
-    if (true) {
+    while (true) {
         c = try stdin.readBytesNoEof(1);
-        std.debug.print("isPlaying: {}, len: {}\n", .{snd.isPlaying(), try snd.getLengthInPcmFrames()});
-        return;
-    }
+        switch (c[0]) {
+            'm' => {
+                var mus = try e.initSoundWithOptions("examples/assets/clearday.mp3", .{
+                    .stream = true,
+                });
+                mus.setFadePointInMilliseconds(0, 0, 0.3, 0, 1000);
+                mus.start();
+            },
+            'b' => try e.playOneShot("examples/assets/clang-beat.wav"),
+            'c' => try e.playOneShot("examples/assets/clang.wav"),
+            'v' => snd.setVolume(0.3),
+            'g' => return,
+            else => {},
+        }
 
+        std.debug.print("isPlaying: {}, len: {}\n", .{ snd.isPlaying(), snd.getLengthInPcmFrames() });
+    }
+}
+
+fn manualApi() void {
     var engine = std.mem.zeroes(ma.ma_engine);
     var res: ma.ma_result = 0;
 
@@ -239,7 +75,7 @@ pub fn main() !void {
 
     var sound = std.mem.zeroes(ma.ma_sound);
 
-    var n = LoadedNotification.init(&sound, onSoundLoaded);
+    var n = LoadNotification.init(&sound, onSoundLoaded);
     n.cb.onSignal = onSoundLoaded;
 
     _ = ma.ma_sound_init_from_file(&engine, "examples/assets/loop.wav", ma.MA_DATA_SOURCE_FLAG_DECODE, &n, null, &sound);
@@ -283,10 +119,10 @@ pub fn main() !void {
 }
 
 fn onSoundLoaded(notification: ?*ma.ma_async_notification, code: c_int) callconv(.C) void {
-    var note = @ptrCast(*LoadedNotification, @alignCast(@alignOf(LoadedNotification), notification));
+    var note = @ptrCast(*LoadNotification, @alignCast(@alignOf(LoadNotification), notification));
     std.debug.print("Loaded. code: {}-----------\n", .{code});
 
-    if (code == 0) {
+    if (code == ma.MA_NOTIFICATION_COMPLETE) {
         var time_in_frames: c_ulonglong = undefined;
         _ = ma.ma_sound_get_time_in_frames(note.sound, &time_in_frames);
         std.debug.print("time from cb: {}\n", .{time_in_frames});
