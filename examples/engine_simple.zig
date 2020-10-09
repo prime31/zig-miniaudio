@@ -6,6 +6,69 @@ const AudioEngine = @import("miniaudio").AudioEngine;
 const SoundGroup = @import("miniaudio").SoundGroup;
 const Sound = @import("miniaudio").Sound;
 
+pub const Effect = struct {
+    sound: Sound = undefined,
+    base: ma.ma_effect_base,
+
+    pub fn init() Effect {
+        return .{ .base = std.mem.zeroes(ma.ma_effect_base) };
+    }
+};
+
+// ma_effect* pEffect, const void* pFramesIn, ma_uint64* pFrameCountIn, void* pFramesOut, ma_uint64* pFrameCountOut);
+fn onProcessPCMFrames(effect: ?*ma.ma_effect, frames_in: ?*const c_void, frame_count_in: [*c]ma.ma_uint64, frames_out: ?*c_void, frame_count_out: [*c]ma.ma_uint64) callconv(.C) ma.ma_result {
+    std.debug.print("onProcessPCMFrames\n", .{});
+    var base = @ptrCast(*Effect, @alignCast(@alignOf(Effect), effect));
+
+    var snd_format = base.sound.getDataFormat();
+    const frame_count: ma.ma_uint64 = std.math.min(frame_count_in.*, frame_count_out.*);
+
+    _ = ma.ma_copy_pcm_frames(frames_out, frames_in, frame_count, snd_format.format, 2);
+
+    frame_count_in.* = frame_count;
+    frame_count_out.* = frame_count;
+
+    return ma.MA_SUCCESS;
+}
+
+fn onGetRequiredInputFrameCount(effect: ?*ma.ma_effect, output_frame_count: ma.ma_uint64) callconv(.C) ma.ma_uint64 {
+    std.debug.print("onGetRequiredInputFrameCount\n", .{});
+    return ma.MA_SUCCESS;
+}
+
+fn onGetExpectedOutputFrameCount(effect: ?*ma.ma_effect, input_frame_count: ma.ma_uint64) callconv(.C) ma.ma_uint64 {
+    std.debug.print("onGetExpectedOutputFrameCount\n", .{});
+    var base = @ptrCast(*Effect, @alignCast(@alignOf(Effect), effect));
+
+    const out_frame_count = ma.ma_effect_get_expected_output_frame_count(&base.base, input_frame_count);
+    std.debug.print("---- out_frame_count: {}\n", .{out_frame_count});
+    return out_frame_count;
+}
+
+fn onGetInputDataFormat(effect: ?*ma.ma_effect, format: [*c]ma.ma_format, channels: [*c]ma.ma_uint32, sample_rate: [*c]ma.ma_uint32) callconv(.C) ma.ma_result {
+    std.debug.print("onGetInputDataFormat\n", .{});
+    var base = @ptrCast(*Effect, @alignCast(@alignOf(Effect), effect));
+    var snd_format = base.sound.getDataFormat();
+    // std.debug.print("snd_format: {}\n", .{snd_format});
+
+    format.* = snd_format.format;
+    channels.* = snd_format.channels;
+    sample_rate.* = snd_format.sample_rate;
+    return ma.MA_SUCCESS;
+}
+
+fn onGetOutputDataFormat(effect: ?*ma.ma_effect, format: [*c]ma.ma_format, channels: [*c]ma.ma_uint32, sample_rate: [*c]ma.ma_uint32) callconv(.C) ma.ma_result {
+    std.debug.print("onGetOutputDataFormat\n", .{});
+    // var base = @ptrCast(*Effect, @alignCast(@alignOf(Effect), effect));
+    // var snd_format = base.sound.getDataFormat();
+    // // std.debug.print("snd_format: {}\n", .{snd_format});
+
+    // format.* = snd_format.format;
+    // channels.* = snd_format.channels;
+    // sample_rate.* = snd_format.sample_rate;
+    return ma.MA_SUCCESS;
+}
+
 pub fn main() !void {
     std.debug.print("engine size: {}, resource size: {}, device size: {}\n", .{ @sizeOf(ma.ma_engine), @sizeOf(ma.ma_resource_manager), @sizeOf(ma.ma_device) });
 
@@ -26,6 +89,7 @@ pub fn main() !void {
     defer sndo.deinit();
     sndo.setFadePointInMilliseconds(0, 0, 0.3, 0, 1000);
     sndo.start();
+    std.debug.print("clang-beat length: {}\n", .{sndo.getLengthInPcmFrames()});
 
     std.debug.print("group. playing: {}, volume: {}, time: {}\n", .{ grp.isPlaying(), grp.getVolume(), grp.getTimeInFrames() });
 
@@ -34,7 +98,17 @@ pub fn main() !void {
     snd.setLooping(true);
     snd.start();
 
-    std.debug.print("\ng: quit\nm: play music\nb: play clang-beat\nc: play clang\nv: lower loop volume\n", .{});
+    var effect = Effect.init();
+    effect.sound = snd;
+    effect.base.onProcessPCMFrames = onProcessPCMFrames;
+    effect.base.onGetRequiredInputFrameCount = onGetRequiredInputFrameCount;
+    effect.base.onGetExpectedOutputFrameCount = onGetExpectedOutputFrameCount;
+    // effect.base.onGetInputDataFormat = onGetInputDataFormat;
+    // effect.base.onGetOutputDataFormat = onGetOutputDataFormat;
+    snd.setEffect(&effect);
+
+
+    std.debug.print("\ng: quit\nm: play music\nb: play clang-beat\nc: play clang\nv: lower loop volume\ne: apply effect\n", .{});
 
     const stdin = std.io.getStdIn().reader();
     var c: [1]u8 = undefined;
@@ -51,11 +125,10 @@ pub fn main() !void {
             'b' => try e.playOneShot("examples/assets/clang-beat.wav"),
             'c' => try e.playOneShot("examples/assets/clang.wav"),
             'v' => snd.setVolume(0.3),
+            'e' => snd.setEffect(&effect),
             'g' => return,
             else => {},
         }
-
-        std.debug.print("isPlaying: {}, len: {}\n", .{ snd.isPlaying(), snd.getLengthInPcmFrames() });
     }
 }
 

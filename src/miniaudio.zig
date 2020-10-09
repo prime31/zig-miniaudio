@@ -149,7 +149,7 @@ pub const SoundGroup = struct {
         _ = ma_sound_group_set_pitch(self.group, pitch);
     }
 
-   pub fn setFadePointInFrames(self: *@This(), fade_point_index: c_uint, volume_beg: f32, volume_end: f32, time_in_frames_beg: c_ulonglong, time_in_frames_end: c_ulonglong) void {
+    pub fn setFadePointInFrames(self: *@This(), fade_point_index: c_uint, volume_beg: f32, volume_end: f32, time_in_frames_beg: c_ulonglong, time_in_frames_end: c_ulonglong) void {
         _ = ma_sound_set_fade_point_in_frames(self.sound, fade_point_index, volume_beg, volume_end, time_in_frames_beg, time_in_frames_end);
     }
 
@@ -184,7 +184,7 @@ pub const Sound = struct {
         group: ?SoundGroup = null,
 
         pub fn getFlags(self: @This()) c_uint {
-            if (self.stream) return MA_DATA_SOURCE_FLAG_DECODE | MA_DATA_SOURCE_FLAG_DECODE | MA_DATA_SOURCE_FLAG_DECODE;
+            if (self.stream) return MA_DATA_SOURCE_FLAG_DECODE | MA_DATA_SOURCE_FLAG_STREAM | MA_DATA_SOURCE_FLAG_ASYNC;
             return MA_DATA_SOURCE_FLAG_DECODE;
         }
     };
@@ -291,6 +291,7 @@ pub const Sound = struct {
         _ = ma_sound_set_fade_point_in_milliseconds(self.sound, fade_point_index, volume_beg, volume_end, time_in_ms_beg, time_in_ms_end);
     }
 
+    /// Enables fading around loop transitions when false
     pub fn setFadePointAutoReset(self: *@This(), fade_point_index: c_uint, auto_reset: bool) void {
         _ = ma_sound_set_fade_point_auto_reset(self.sound, fade_point_index, if (auto_reset) 1 else 0);
     }
@@ -313,10 +314,16 @@ pub const Sound = struct {
         _ = ma_sound_seek_to_pcm_frame(self.sound, frame_index);
     }
 
-    // MA_API ma_result ma_sound_get_data_format(ma_sound* pSound, ma_format* pFormat, ma_uint32* pChannels, ma_uint32* pSampleRate);
-    pub fn getDataFormat(self: *@This()) void {
-        @compileError("not imp");
-        _ = ma_sound_get_data_format(self.sound, delay_in_ms);
+    pub fn getDataFormat(self: *@This()) struct { format: ma_format, channels: ma_uint32, sample_rate: ma_uint32 } {
+        var format: ma_format = undefined;
+        var channels: ma_uint32 = undefined;
+        var sample_rate: ma_uint32 = undefined;
+        _ = ma_sound_get_data_format(self.sound, &format, &channels, &sample_rate);
+        return .{
+            .format = format,
+            .channels = channels,
+            .sample_rate = sample_rate,
+        };
     }
 
     pub fn getCursorInPcmFrames(self: *@This()) c_ulonglong {
