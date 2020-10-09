@@ -27,6 +27,21 @@
             }
         },
         {
+            "label": "Compile miniaudio to object file",
+            "type": "shell",
+            "command": "zig build compile",
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "clear": true
+            }
+        },
+        {
             "label": "Build and Run Project (release-fast)",
             "type": "shell",
             "command": "zig build run -Drelease-fast",
