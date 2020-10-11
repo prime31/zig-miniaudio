@@ -5,7 +5,7 @@ usingnamespace @cImport({
 
 const std = @import("std");
 
-const LoadNotification = struct {
+const LoadNotification = extern struct {
     cb: ma_async_notification_callbacks = .{ .onSignal = null },
     sound: ?*ma_sound = null,
 
@@ -176,7 +176,7 @@ pub const SoundGroup = struct {
     }
 };
 
-pub const Sound = struct {
+pub const Sound = extern struct {
     sound: *ma_sound,
 
     pub const LoadOptions = struct {
@@ -335,6 +335,12 @@ pub const Sound = struct {
         var length: c_ulonglong = undefined;
         _ = ma_sound_get_length_in_pcm_frames(self.sound, &length);
         return length;
+    }
+
+    pub fn getLength(self: *@This()) f32 {
+        const format = self.getDataFormat();
+        const frames = self.getLengthInPcmFrames();
+        return @intToFloat(f32, frames / format.sample_rate);
     }
 };
 
