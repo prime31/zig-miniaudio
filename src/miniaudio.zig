@@ -6,37 +6,161 @@ usingnamespace @cImport({
 const std = @import("std");
 
 const LoadNotification = extern struct {
-    cb: ma_async_notification_callbacks = .{ .onSignal = null },
-    sound: ?*ma_sound = null,
+    cb: ma_async_notification_callbacks = .{ .onSignal = onSoundLoaded },
+    sound: *Sound,
+    allocator: *std.mem.Allocator = undefined,
 
-    pub fn init(sound: *ma_sound, onSignal: fn (?*ma_async_notification, c_int) callconv(.C) void) LoadNotification {
-        var note = LoadNotification{ .sound = sound };
-        note.cb.onSignal = onSignal;
+    pub fn create(allocator: *std.mem.Allocator, sound: *Sound) !LoadNotification {
+        var note = try allocator.create(LoadNotification);
+        note.cb.onSignal = onSoundLoaded;
+        note.sound = sound;
+        note.allocator = allocator;
         return note;
+    }
+
+    pub fn destroy(self: *@This()) void {
+        self.allocator.destroy(self);
+    }
+
+    fn onSoundLoaded(notification: ?*ma_async_notification, code: c_int) callconv(.C) void {
+        var note = @ptrCast(*LoadNotification, @alignCast(@alignOf(LoadNotification), notification));
+        std.debug.print("Loaded. code: {}-----------\n", .{code});
+
+        if (code == MA_NOTIFICATION_COMPLETE) {
+            note.destroy();
+        } else if (code == MA_NOTIFICATION_FAILED) {
+            note.destroy();
+        }
+    }
+};
+
+pub const PassThroughEffect = extern struct {
+    base: ma_effect_base,
+    format: ma_format,
+    channels: ma_uint32,
+
+    pub fn init(format: ma_format, channels: ma_uint32) PassThroughEffect {
+        return .{
+            .base = std.mem.zeroInit(ma_effect_base, .{
+                .onProcessPCMFrames = onProcessPCMFrames,
+                // .onGetRequiredInputFrameCount = onGetRequiredInputFrameCount;
+                // .onGetExpectedOutputFrameCount = onGetExpectedOutputFrameCount;
+                .onGetInputDataFormat = onGetInputDataFormat,
+                .onGetOutputDataFormat = onGetOutputDataFormat,
+            }),
+            .format = format,
+            .channels = channels,
+        };
+    }
+
+    /// inputFrameCount is how many valid input frames are available in the input buffer.
+    /// On output you need to set it to how many input frames were actually consumed.
+    /// On input, outputFrameCount is the capacity of the output buffer.
+    /// On output you need to set it to how many output frames were actually output.
+    fn onProcessPCMFrames(effect: ?*ma_effect, frames_in: ?*const c_void, frame_count_in: [*c]ma_uint64, frames_out: ?*c_void, frame_count_out: [*c]ma_uint64) callconv(.C) ma_result {
+        std.debug.print("onProcessPCMFrames\n", .{});
+        var base = @ptrCast(*PassThroughEffect, @alignCast(@alignOf(PassThroughEffect), effect));
+
+        const frame_count: ma_uint64 = std.math.min(frame_count_in.*, frame_count_out.*);
+        _ = ma_copy_pcm_frames(frames_out, frames_in, frame_count, base.format, base.channels);
+
+        // example of doing a pan effect
+        // var out = @ptrCast([*]f32, @alignCast(@alignOf(f32), frames_out))[0..frame_count * 2];
+        // var in = @ptrCast([*]const f32, @alignCast(@alignOf(f32), frames_in))[0..frame_count * 2];
+        // stereoBalancePcmFrames(out, in, frame_count, -1);
+
+        frame_count_in.* = frame_count;
+        frame_count_out.* = frame_count;
+
+        return MA_SUCCESS;
+    }
+
+    // example of doing a pan effect
+    fn stereoBalancePcmFrames(out: []f32, in: []const f32, frame_count: ma_uint64, pan: f32) void {
+        var i: usize = 0;
+
+        if (pan > 0) {
+            var factor = 1.0 - pan;
+            if (out.ptr == in.ptr) {
+                while (i < frame_count) : (i += 1) {
+                    out[i*2 + 0] = in[i*2 + 0] * factor;
+                }
+            } else {
+                while (i < frame_count) : (i += 1) {
+                    out[i*2 + 0] = in[i*2 + 0] * factor;
+                    out[i*2 + 1] = in[i*2 + 1];
+                }
+            }
+        } else {
+            var factor = 1.0 + pan;
+            if (out.ptr == in.ptr) {
+                while (i < frame_count) : (i += 1) {
+                    out[i*2 + 1] = in[i*2 + 1] * factor;
+                }
+            } else {
+                while (i < frame_count) : (i += 1) {
+                    out[i*2 + 0] = in[i*2 + 0];
+                    out[i*2 + 1] = in[i*2 + 1] * factor;
+                }
+            }
+        }
+    }
+
+    fn onGetRequiredInputFrameCount(effect: ?*ma_effect, output_frame_count: ma_uint64) callconv(.C) ma_uint64 {
+        std.debug.print("onGetRequiredInputFrameCount\n", .{});
+        return MA_SUCCESS;
+    }
+
+    fn onGetExpectedOutputFrameCount(effect: ?*ma_effect, input_frame_count: ma_uint64) callconv(.C) ma_uint64 {
+        std.debug.print("onGetExpectedOutputFrameCount\n", .{});
+        var base = @ptrCast(*PassThroughEffect, @alignCast(@alignOf(PassThroughEffect), effect));
+
+        const out_frame_count = ma_effect_get_expected_output_frame_count(&base.base, input_frame_count);
+        std.debug.print("---- out_frame_count: {}\n", .{out_frame_count});
+        return out_frame_count;
+    }
+
+    fn onGetInputDataFormat(effect: ?*ma_effect, format: [*c]ma_format, channels: [*c]ma_uint32, sample_rate: [*c]ma_uint32) callconv(.C) ma_result {
+        var base = @ptrCast(*PassThroughEffect, @alignCast(@alignOf(PassThroughEffect), effect));
+
+        format.* = base.format;
+        channels.* = base.channels;
+        sample_rate.* = 0; //snd_format.sample_rate;
+        return MA_SUCCESS;
+    }
+
+    fn onGetOutputDataFormat(effect: ?*ma_effect, format: [*c]ma_format, channels: [*c]ma_uint32, sample_rate: [*c]ma_uint32) callconv(.C) ma_result {
+        var base = @ptrCast(*PassThroughEffect, @alignCast(@alignOf(PassThroughEffect), effect));
+
+        format.* = base.format;
+        channels.* = base.channels;
+        sample_rate.* = 0; //snd_format.sample_rate;
+        return MA_SUCCESS;
     }
 };
 
 pub const AudioEngine = struct {
+    allocator: *std.mem.Allocator = undefined,
     engine: *ma_engine,
 
-    pub fn init() !AudioEngine {
-        return initWithOptions(null);
+    pub fn init(allocator: *std.mem.Allocator) !AudioEngine {
+        return initWithOptions(allocator, null);
     }
 
-    pub fn initWithOptions(config: ?*ma_engine_config) !AudioEngine {
-        var engine = try std.testing.allocator.create(ma_engine);
+    pub fn initWithOptions(allocator: *std.mem.Allocator, config: ?*ma_engine_config) !AudioEngine {
+        var engine = try allocator.create(ma_engine);
 
         const res = ma_engine_init(config, engine);
         if (res == MA_SUCCESS)
-            return AudioEngine{ .engine = engine };
+            return AudioEngine{ .allocator = allocator, .engine = engine };
 
-        std.testing.allocator.destroy(engine);
+        allocator.destroy(engine);
         return errorForResult(res);
     }
 
     pub fn deinit(self: *@This()) void {
         ma_engine_uninit(self.engine);
-        std.testing.allocator.destroy(self.engine);
+        self.allocator.destroy(self.engine);
     }
 
     pub fn setVolume(self: *@This(), volume: f32) void {
@@ -84,33 +208,34 @@ pub const AudioEngine = struct {
 };
 
 pub const SoundGroup = struct {
+    allocator: *std.mem.Allocator = undefined,
     group: *ma_sound_group,
 
     pub fn init(engine: *AudioEngine) !SoundGroup {
-        var group = try std.testing.allocator.create(ma_sound_group);
+        var group = try engine.allocator.create(ma_sound_group);
 
         const res = ma_sound_group_init(engine.engine, null, group);
         if (res == MA_SUCCESS)
-            return SoundGroup{ .group = group };
+            return SoundGroup{ .allocator = engine.allocator, .group = group };
 
-        std.testing.allocator.destroy(group);
+        engine.allocator.destroy(group);
         return errorForResult(res);
-    }
-
-    pub fn deinit(self: @This()) void {
-        ma_sound_group_uninit(self.group);
-        std.testing.allocator.destroy(self.group);
     }
 
     pub fn initWithParent(engine: *AudioEngine, parent: SoundGroup) !SoundGroup {
-        var group = try std.testing.allocator.create(ma_sound_group);
+        var group = try engine.allocator.create(ma_sound_group);
 
         const res = ma_sound_group_init(engine.engine, parent.group, group);
         if (res == MA_SUCCESS)
-            return SoundGroup{ .group = group };
+            return SoundGroup{ .allocator = engine.allocator, .group = group };
 
-        std.testing.allocator.destroy(group);
+        engine.allocator.destroy(group);
         return errorForResult(res);
+    }
+
+    pub fn deinit(self: *@This()) void {
+        ma_sound_group_uninit(self.group);
+        self.allocator.destroy(self.group);
     }
 
     pub fn isPlaying(self: @This()) bool {
@@ -177,6 +302,7 @@ pub const SoundGroup = struct {
 };
 
 pub const Sound = extern struct {
+    allocator: *std.mem.Allocator = undefined,
     sound: *ma_sound,
 
     pub const LoadOptions = struct {
@@ -194,33 +320,33 @@ pub const Sound = extern struct {
     }
 
     pub fn initWithOptions(engine: *AudioEngine, path: [*c]const u8, options: LoadOptions) !Sound {
-        var sound = try std.testing.allocator.create(ma_sound);
+        var sound = try engine.allocator.create(ma_sound);
 
         var group = if (options.group) |g| g.group else null;
         const res = ma_sound_init_from_file(engine.engine, path, options.getFlags(), null, group, sound);
         if (res == MA_SUCCESS) {
-            return Sound{ .sound = sound };
+            return Sound{ .allocator = engine.allocator, .sound = sound };
         }
 
-        std.testing.allocator.destroy(sound);
+        engine.allocator.destroy(sound);
         return errorForResult(res);
     }
 
     pub fn initFromDataSource(engine: *AudioEngine, data_source: *ma_data_source, flags: ma_unit32) !Sound {
-        var sound = try std.testing.allocator.create(ma_sound);
+        var sound = try engine.allocator.create(ma_sound);
 
         const res = init_from_data_source(engine.engine, data_source, flags, null, sound);
         if (res == MA_SUCCESS) {
-            return Sound{ .sound = sound };
+            return Sound{ .allocator = engine.allocator, .sound = sound };
         }
 
-        std.testing.allocator.destroy(sound);
+        engine.allocator.destroy(sound);
         return errorForResult(res);
     }
 
     pub fn deinit(self: @This()) void {
         ma_sound_uninit(self.sound);
-        std.testing.allocator.destroy(self.sound);
+        self.allocator.destroy(self.sound);
     }
 
     pub fn isPlaying(self: @This()) bool {
@@ -346,8 +472,20 @@ pub const Sound = extern struct {
 };
 
 fn errorForResult(res: ma_result) anyerror {
-    std.debug.print("----- errors still need to be filled in: {}\n", .{res});
     return switch (res) {
+        MA_INVALID_ARGS => error.InvalidArgs,
+        MA_OUT_OF_MEMORY => error.OutOfMemory,
+        MA_OUT_OF_RANGE => error.OutOfRange,
+        MA_ACCESS_DENIED => error.AccessDenied,
+        MA_DOES_NOT_EXIST => error.DoesNotExist,
+        MA_ALREADY_EXISTS => error.AlreadyExists,
+        MA_TOO_MANY_OPEN_FILES => error.TooManyOpenFiles,
+        MA_INVALID_FILE => error.InvalidFile,
+        MA_TOO_BIG => error.TooBig,
+        MA_PATH_TOO_LONG => error.PathTooLong,
+        MA_NAME_TOO_LONG => error.NameTooLong,
+        MA_NOT_DIRECTORY => error.NotDirectory,
+        MA_IS_DIRECTORY => error.IsDirectory,
         else => error.Unknown,
     };
 }
