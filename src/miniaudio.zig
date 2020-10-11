@@ -251,8 +251,9 @@ pub const Sound = extern struct {
         self.setVolume(ma_gain_db_to_factor(gain_db));
     }
 
-    pub fn setEffect(self: *@This(), effect: *ma_effect) void {
-        _ = ma_sound_set_effect(self.sound, effect);
+    pub fn setEffect(self: *@This(), effect: ?*ma_effect) void {
+        self.sound.effect.pPreEffect = effect;
+        // _ = ma_sound_set_effect(self.sound, effect);
     }
 
     pub fn setPan(self: *@This(), pan: f32) void {
