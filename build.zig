@@ -70,6 +70,8 @@ pub fn linkArtifact(b: *Builder, exe: *std.build.LibExeObjStep, target: std.buil
         const frameworks_dir = macosFrameworksDir(b) catch unreachable;
         exe.addFrameworkDir(frameworks_dir);
         exe.linkFramework("CoreAudio");
+        exe.linkFramework("CoreFoundation");
+        exe.linkFramework("AudioUnit");
     } else if (target.isLinux()) {
         exe.linkSystemLibrary("pthread");
         exe.linkSystemLibrary("m");
@@ -84,7 +86,7 @@ pub fn linkArtifact(b: *Builder, exe: *std.build.LibExeObjStep, target: std.buil
     if (compile_type == .pre_compiled) {
         exe.addObjectFile("src/miniaudio.o");
     } else {
-        const cflags = &[_][]const u8{ "-DMA_NO_FLAC", "-DMA_NO_WEBAUDIO", "-DMA_NO_ENCODING", "-DMA_NO_NULL" };
+        const cflags = &[_][]const u8{ "-DMA_NO_FLAC", "-DMA_NO_WEBAUDIO", "-DMA_NO_ENCODING", "-DMA_NO_NULL", "-DMA_NO_RUNTIME_LINKING" };
         exe.addCSourceFile("src/miniaudio.c", cflags);
     }
 
