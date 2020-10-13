@@ -64,7 +64,7 @@ pub const PassThroughEffect = extern struct {
         const frame_count: ma_uint64 = std.math.min(frame_count_in.*, frame_count_out.*);
         _ = ma_copy_pcm_frames(frames_out, frames_in, frame_count, base.format, base.channels);
 
-        // example of doing a pan effect
+        // example of doing a pan effect, which only operates in stereo streams which is why the slice is frame_count * 2
         // var out = @ptrCast([*]f32, @alignCast(@alignOf(f32), frames_out))[0..frame_count * 2];
         // var in = @ptrCast([*]const f32, @alignCast(@alignOf(f32), frames_in))[0..frame_count * 2];
         // stereoBalancePcmFrames(out, in, frame_count, -1);

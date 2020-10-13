@@ -26,7 +26,7 @@ pub fn build(b: *std.build.Builder) anyerror!void {
 
         if (build_type == .static) {
             const lib = b.addStaticLibrary("miniaudio", null);
-            lib.setBuildMode(std.builtin.Mode.ReleaseFast);
+            lib.setBuildMode(std.builtin.Mode.ReleaseSmall);
             lib.setTarget(target);
 
             linkArtifact(b, lib, target);
