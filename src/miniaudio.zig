@@ -83,24 +83,24 @@ pub const PassThroughEffect = extern struct {
             var factor = 1.0 - pan;
             if (out.ptr == in.ptr) {
                 while (i < frame_count) : (i += 1) {
-                    out[i*2 + 0] = in[i*2 + 0] * factor;
+                    out[i * 2 + 0] = in[i * 2 + 0] * factor;
                 }
             } else {
                 while (i < frame_count) : (i += 1) {
-                    out[i*2 + 0] = in[i*2 + 0] * factor;
-                    out[i*2 + 1] = in[i*2 + 1];
+                    out[i * 2 + 0] = in[i * 2 + 0] * factor;
+                    out[i * 2 + 1] = in[i * 2 + 1];
                 }
             }
         } else {
             var factor = 1.0 + pan;
             if (out.ptr == in.ptr) {
                 while (i < frame_count) : (i += 1) {
-                    out[i*2 + 1] = in[i*2 + 1] * factor;
+                    out[i * 2 + 1] = in[i * 2 + 1] * factor;
                 }
             } else {
                 while (i < frame_count) : (i += 1) {
-                    out[i*2 + 0] = in[i*2 + 0];
-                    out[i*2 + 1] = in[i*2 + 1] * factor;
+                    out[i * 2 + 0] = in[i * 2 + 0];
+                    out[i * 2 + 1] = in[i * 2 + 1] * factor;
                 }
             }
         }
@@ -202,7 +202,7 @@ pub const AudioEngine = struct {
         return Sound.initWithOptions(self, path, options);
     }
 
-    pub fn initSoundFromDataSource(self: *@This(), data_source: *ma_data_source, flags: ma_unit32) !Sound {
+    pub fn initSoundFromDataSource(self: *@This(), data_source: *ma_data_source, flags: ma_uint32) !Sound {
         return Sound.initFromDataSource(self, data_source, flags);
     }
 };
@@ -332,16 +332,30 @@ pub const Sound = extern struct {
         return errorForResult(res);
     }
 
-    pub fn initFromDataSource(engine: *AudioEngine, data_source: *ma_data_source, flags: ma_unit32) !Sound {
+    pub fn initFromDataSource(engine: *AudioEngine, data_source: *ma_data_source, flags: ma_uint32) !Sound {
         var sound = try engine.allocator.create(ma_sound);
 
-        const res = init_from_data_source(engine.engine, data_source, flags, null, sound);
+        const res = ma_sound_init_from_data_source(engine.engine, data_source, flags, null, sound);
         if (res == MA_SUCCESS) {
             return Sound{ .allocator = engine.allocator, .sound = sound };
         }
 
         engine.allocator.destroy(sound);
         return errorForResult(res);
+    }
+
+    pub fn initWaveform(engine: *AudioEngine, waveform_type: ma_waveform_type, amplitude: f64, frequency: f64) !Sound {
+        var waveform = engine.allocator.create(ma_waveform) catch unreachable;
+        errdefer engine.allocator.destroy(waveform);
+
+        const config = ma_waveform_config_init(engine.engine.format, engine.engine.channels, engine.engine.sampleRate, waveform_type, amplitude, frequency);
+        var res = ma_waveform_init(&config, waveform);
+        if (res != 0) {
+            engine.allocator.destroy(waveform);
+            return errorForResult(res);
+        }
+
+        return engine.initSoundFromDataSource(waveform, 0);
     }
 
     pub fn deinit(self: @This()) void {
@@ -468,6 +482,110 @@ pub const Sound = extern struct {
         const format = self.getDataFormat();
         const frames = self.getLengthInPcmFrames();
         return @intToFloat(f32, frames / format.sample_rate);
+    }
+};
+
+pub const DataSource = extern struct {
+    ds: ma_data_source_callbacks,
+    engine: *AudioEngine,
+    time: f32 = 0,
+    advance: f32,
+
+    pub fn create(engine: *AudioEngine) !*DataSource {
+        var data_source = try engine.allocator.create(DataSource);
+        data_source.ds = std.mem.zeroInit(ma_data_source_callbacks, .{
+            .onRead = onRead,
+            .onSeek = onSeek,
+            .onMap = null,
+            .onUnmap = null,
+            .onGetDataFormat = onGetDataFormat,
+            .onGetCursor = onGetCursor,
+            .onGetLength = null, // no length for generated audio
+        });
+        data_source.engine = engine;
+        data_source.time = 0;
+        data_source.advance = 1.0 / @intToFloat(f32, engine.engine.sampleRate);
+        return data_source;
+    }
+
+    pub fn init(engine: *AudioEngine) DataSource {
+        return .{
+            .ds = std.mem.zeroInit(ma_data_source_callbacks, .{
+                .onRead = onRead,
+                .onSeek = onSeek,
+                .onMap = null,
+                .onUnmap = null,
+                .onGetDataFormat = onGetDataFormat,
+                .onGetCursor = onGetCursor,
+                .onGetLength = null, // no length for generated audio
+            }),
+            .engine = engine,
+            .advance = 1.0 / @intToFloat(f32, engine.engine.sampleRate),
+        };
+    }
+
+    fn onRead(data_source: ?*ma_data_source, frames_out: ?*c_void, frame_count: ma_uint64, frames_read: [*c]ma_uint64) callconv(.C) ma_result {
+        std.debug.print("onRead. frame_count: {d}\n", .{frame_count});
+        var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
+        var out = @ptrCast([*]f32, @alignCast(@alignOf(f32), frames_out))[0..frame_count];
+
+        const frequency = 220.0;
+        const amplitude = 0.5;
+
+        if (frames_out != null) {
+            var i: usize = 0;
+            while (i < frame_count) : (i += 1) {
+                out[i] = std.math.sin(std.math.tau * base.time * frequency) * amplitude;
+                base.time += base.advance;
+            }
+        } else {
+            base.time += base.advance * @intToFloat(f32, frame_count);
+        }
+
+        frames_read.* = frame_count;
+
+        return MA_SUCCESS;
+    }
+
+    fn onSeek(data_source: ?*ma_data_source, frame_index: ma_uint64) callconv(.C) ma_result {
+        std.debug.print("onSeek: {d}\n", .{frame_index});
+        var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
+        return MA_SUCCESS;
+    }
+
+    fn onMap(data_source: ?*ma_data_source, frames_out: [*c]?*c_void, frame_count: [*c]ma_uint64) callconv(.C) ma_result {
+        std.debug.print("onMap\n", .{});
+        var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
+        return MA_SUCCESS;
+    }
+
+    fn onUnmap(data_source: ?*ma_data_source, frame_count: ma_uint64) callconv(.C) ma_result {
+        std.debug.print("onUnmap\n", .{});
+        var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
+        return MA_SUCCESS;
+    }
+
+    fn onGetDataFormat(data_source: ?*ma_data_source, format: [*c]ma_format, channels: [*c]ma_uint32, sample_rate: [*c]ma_uint32) callconv(.C) ma_result {
+        std.debug.print("onGetDataFormat\n", .{});
+        var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
+
+        format.* = base.engine.engine.format;
+        channels.* = 1; //base.engine.engine.channels;
+        sample_rate.* = base.engine.engine.sampleRate;
+        return MA_SUCCESS;
+    }
+
+    fn onGetCursor(data_source: ?*ma_data_source, cursor: [*c]ma_uint64) callconv(.C) ma_result {
+        std.debug.print("onGetCursor\n", .{});
+        var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
+        cursor.* = @floatToInt(ma_uint64, base.time / base.advance);
+        return MA_SUCCESS;
+    }
+
+    fn onGetLength(data_source: ?*ma_data_source, length: [*c]ma_uint64) callconv(.C) ma_result {
+        std.debug.print("onGetLength\n", .{});
+        var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
+        return MA_SUCCESS;
     }
 };
 
