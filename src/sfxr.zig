@@ -1,5 +1,7 @@
 const std = @import("std");
 usingnamespace @import("c.zig").ma;
+const AudioEngine = @import("miniaudio.zig").AudioEngine;
+const DataSource = @import("miniaudio.zig").DataSource;
 
 var rng = std.rand.DefaultPrng.init(0x12345678);
 
@@ -14,7 +16,7 @@ fn rnd(val: i32) i32 {
 
 const pow = std.math.pow;
 
-pub const SfxrParams = struct {
+pub const SfxrParams = extern struct {
     wave_type: i32 = 0,
 
     p_base_freq: f32 = 0.3,
@@ -59,8 +61,9 @@ pub const SfxrParams = struct {
         self.* = .{};
     }
 
-    pub fn loadPreset(self: *SfxrParams, preset: SfxrPreset) void {
+    pub fn loadPreset(self: *SfxrParams, preset: SfxrPreset, seed: u64) void {
         self.reset();
+        rng.seed(seed);
 
         switch (preset) {
             .coin => {
@@ -74,14 +77,138 @@ pub const SfxrParams = struct {
                     self.p_arp_mod = 0.2 + frnd(0.4);
                 }
             },
-            else => {},
+            .laser => {
+                self.wave_type = rnd(2);
+                if (self.wave_type == 2 and rng.random.boolean())
+                    self.wave_type = rnd(1);
+                self.p_base_freq = 0.5 + frnd(0.5);
+                self.p_freq_limit = self.p_base_freq - 0.2 - frnd(0.6);
+                if (self.p_freq_limit < 0.2) self.p_freq_limit = 0.2;
+                self.p_freq_ramp = -0.15 - frnd(0.2);
+                if (rnd(2) == 0) {
+                    self.p_base_freq = 0.3 + frnd(0.6);
+                    self.p_freq_limit = frnd(0.1);
+                    self.p_freq_ramp = -0.35 - frnd(0.3);
+                }
+                if (rng.random.boolean()) {
+                    self.p_duty = frnd(0.5);
+                    self.p_duty_ramp = frnd(0.2);
+                } else {
+                    self.p_duty = 0.4 + frnd(0.5);
+                    self.p_duty_ramp = -frnd(0.7);
+                }
+                self.p_env_attack = 0.0;
+                self.p_env_sustain = 0.1 + frnd(0.2);
+                self.p_env_decay = frnd(0.4);
+                if (rng.random.boolean())
+                    self.p_env_punch = frnd(0.3);
+                if (rnd(2) == 0) {
+                    self.p_pha_offset = frnd(0.2);
+                    self.p_pha_ramp = -frnd(0.2);
+                }
+                if (rng.random.boolean())
+                    self.p_hpf_freq = frnd(0.3);
+            },
+            .explosion => {
+                self.wave_type = 3;
+                if (rng.random.boolean()) {
+                    self.p_base_freq = 0.1 + frnd(0.4);
+                    self.p_freq_ramp = -0.1 + frnd(0.4);
+                } else {
+                    self.p_base_freq = 0.2 + frnd(0.7);
+                    self.p_freq_ramp = -0.2 - frnd(0.2);
+                }
+                self.p_base_freq *= self.p_base_freq;
+                if (rnd(4) == 0)
+                    self.p_freq_ramp = 0.0;
+                if (rnd(2) == 0)
+                    self.p_repeat_speed = 0.3 + frnd(0.5);
+                self.p_env_attack = 0.0;
+                self.p_env_sustain = 0.1 + frnd(0.3);
+                self.p_env_decay = frnd(0.5);
+                if (rng.random.boolean()) {
+                    self.p_pha_offset = -0.3 + frnd(0.9);
+                    self.p_pha_ramp = -frnd(0.3);
+                }
+                self.p_env_punch = 0.2 + frnd(0.6);
+                if (rng.random.boolean()) {
+                    self.p_vib_strength = frnd(0.7);
+                    self.p_vib_speed = frnd(0.6);
+                }
+                if (rnd(2) == 0) {
+                    self.p_arp_speed = 0.6 + frnd(0.3);
+                    self.p_arp_mod = 0.8 - frnd(1.6);
+                }
+            },
+            .power_up => {
+                if (rng.random.boolean()) {
+                    self.wave_type = 1;
+                } else {
+                    self.p_duty = frnd(0.6);
+                }
+                if (rng.random.boolean()) {
+                    self.p_base_freq = 0.2 + frnd(0.3);
+                    self.p_freq_ramp = 0.1 + frnd(0.4);
+                    self.p_repeat_speed = 0.4 + frnd(0.4);
+                } else {
+                    self.p_base_freq = 0.2 + frnd(0.3);
+                    self.p_freq_ramp = 0.05 + frnd(0.2);
+                    if (rng.random.boolean()) {
+                        self.p_vib_strength = frnd(0.7);
+                        self.p_vib_speed = frnd(0.6);
+                    }
+                }
+                self.p_env_attack = 0.0;
+                self.p_env_sustain = frnd(0.4);
+                self.p_env_decay = 0.1 + frnd(0.4);
+            },
+            .hurt => {
+                self.wave_type = rnd(2);
+                if (self.wave_type == 2)
+                    self.wave_type = 3;
+                if (self.wave_type == 0)
+                    self.p_duty = frnd(0.6);
+                self.p_base_freq = 0.2 + frnd(0.6);
+                self.p_freq_ramp = -0.3 - frnd(0.4);
+                self.p_env_attack = 0.0;
+                self.p_env_sustain = frnd(0.1);
+                self.p_env_decay = 0.1 + frnd(0.2);
+                if (rng.random.boolean())
+                    self.p_hpf_freq = frnd(0.3);
+            },
+            .jump => {
+                self.wave_type = 0;
+                self.p_duty = frnd(0.6);
+                self.p_base_freq = 0.3 + frnd(0.3);
+                self.p_freq_ramp = 0.1 + frnd(0.2);
+                self.p_env_attack = 0.0;
+                self.p_env_sustain = 0.1 + frnd(0.3);
+                self.p_env_decay = 0.1 + frnd(0.2);
+                if (rng.random.boolean())
+                    self.p_hpf_freq = frnd(0.3);
+                if (rng.random.boolean())
+                    self.p_lpf_freq = 1.0 - frnd(0.6);
+            },
+            .blip => {
+                self.wave_type = rnd(1);
+                if (self.wave_type == 0)
+                    self.p_duty = frnd(0.6);
+                self.p_base_freq = 0.2 + frnd(0.4);
+                self.p_env_attack = 0.0;
+                self.p_env_sustain = 0.1 + frnd(0.1);
+                self.p_env_decay = frnd(0.2);
+                self.p_hpf_freq = 0.1;
+            },
         }
     }
 };
 
-pub const SfxrDataSource = struct {
+pub const SfxrDataSource = extern struct {
+    ds: ma_data_source_callbacks = undefined,
+    engine: *AudioEngine = undefined,
+
     looping: bool = false,
-    playing_sample: bool = false,
+    playing_sample: bool = true,
     phase: i32 = 0,
     fperiod: f64 = 0,
     fmaxperiod: f64 = 0,
@@ -119,8 +246,25 @@ pub const SfxrDataSource = struct {
 
     params: SfxrParams = .{},
 
-    pub fn init() SfxrDataSource {
-        return .{};
+    pub fn create(engine: *AudioEngine) !*SfxrDataSource {
+        var dds = try engine.allocator.create(SfxrDataSource);
+        dds.* = .{};
+        dds.resetSample(false);
+        dds.ds = std.mem.zeroInit(ma_data_source_callbacks, .{
+            .onRead = onRead,
+            .onGetDataFormat = onGetDataFormat,
+        });
+        dds.engine = engine;
+
+        return dds;
+    }
+
+    pub fn destroy(self: *@This()) void {
+        self.engine.allocator.destroy(sel);
+    }
+
+    pub fn createSound(self: *@This()) !Sound {
+        return Sound.initFromMaDataSource(self.data_source.engine, self, 0) catch unreachable;
     }
 
     pub fn resetSample(self: *SfxrDataSource, restart: bool) void {
@@ -193,12 +337,10 @@ pub const SfxrDataSource = struct {
         }
     }
 
-    pub fn onRead(data_source: ?*ma_data_source, frames_out: ?*c_void, frame_count: ma_uint64, frames_read: [*c]ma_uint64) callconv(.C) ma_result {
+    fn onRead(data_source: ?*ma_data_source, frames_out: ?*c_void, frame_count: ma_uint64, frames_read: [*c]ma_uint64) callconv(.C) ma_result {
         var self = @ptrCast(*SfxrDataSource, @alignCast(@alignOf(SfxrDataSource), data_source));
         var out = @ptrCast([*]f32, @alignCast(@alignOf(f32), frames_out))[0..frame_count];
-        frames_read.* = frame_count;
 
-        // TODO: adjust frames_read for EOF
         for (out) |*frame, i| {
             self.rep_time += 1;
             if (self.rep_limit != 0 and self.rep_time >= self.rep_limit) {
@@ -359,6 +501,22 @@ pub const SfxrDataSource = struct {
 
             frame.* = std.math.clamp(ssample, -1, 1);
         }
+        frames_read.* = frame_count;
+        return MA_SUCCESS;
+    }
+
+    pub fn onSeek(data_source: ?*ma_data_source, frame_index: ma_uint64) callconv(.C) ma_result {
+        std.debug.print("onSeek: {d}\n", .{frame_index});
+        var base = @ptrCast(*SfxrDataSource, @alignCast(@alignOf(SfxrDataSource), data_source));
+        return MA_SUCCESS;
+    }
+
+    pub fn onGetDataFormat(data_source: ?*ma_data_source, format: [*c]ma_format, channels: [*c]ma_uint32, sample_rate: [*c]ma_uint32) callconv(.C) ma_result {
+        var base = @ptrCast(*SfxrDataSource, @alignCast(@alignOf(SfxrDataSource), data_source));
+
+        format.* = base.engine.engine.format;
+        channels.* = 1;
+        sample_rate.* = base.engine.engine.sampleRate;
         return MA_SUCCESS;
     }
 };

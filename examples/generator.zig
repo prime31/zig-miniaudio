@@ -14,10 +14,7 @@ pub fn main() !void {
     var e = try AudioEngine.init(std.testing.allocator);
     defer e.deinit();
 
-    var sf = ma.SfxrDataSource.init();
-    sf.params.loadPreset(.coin);
-
-    std.debug.print("\nq: quit\nm: generate\n", .{});
+    std.debug.print("\nq: quit\nm: sine Waveform\nd: sine from DataSource\nc: sfxr coin\nh: sfxr hurt\nj: sfxr jump\nb: sfxr blip\ne: sfxr explosion\nl: sfxr laser\np: sfxr power up\n", .{});
 
     // example, create a real one and replace this
     // var dds = try DynamicDataSource.create(&e, std.mem.zeroInit(ma.ma_data_source_callbacks, .{
@@ -31,12 +28,33 @@ pub fn main() !void {
     while (true) {
         c = try stdin.readBytesNoEof(1);
         switch (c[0]) {
-            'm' => soundWaveform(&e),
-            'd' => soundDataSource(&e),
+            'm' => (try Sound.initWaveform(&e, .ma_waveform_type_sine, 0.5, 220)).start(),
+            'd' => {
+                var ds = try DataSource.create(&e);
+                var sound = try Sound.initFromDataSource(&e, ds, 0);
+                sound.start();
+            },
+            'c' => sfxr(.coin, &e),
+            'h' => sfxr(.hurt, &e),
+            'j' => sfxr(.jump, &e),
+            'b' => sfxr(.blip, &e),
+            'e' => sfxr(.explosion, &e),
+            'l' => sfxr(.laser, &e),
+            'p' => sfxr(.power_up, &e),
             'g', 'q' => break,
             else => {},
         }
     }
+}
+
+fn sfxr(preset: ma.SfxrPreset, e: *AudioEngine) void {
+    var rng = std.rand.DefaultPrng.init(@intCast(u64, std.time.timestamp()));
+
+    var sf = ma.SfxrDataSource.create(e) catch unreachable;
+    sf.params.loadPreset(preset, rng.random.int(u64));
+
+    var sound = Sound.initFromMaDataSource(e, sf, 0) catch unreachable;
+    sound.start();
 }
 
 fn generate(e: *AudioEngine) void {
@@ -73,35 +91,4 @@ fn generate(e: *AudioEngine) void {
     _ = ma.ma_sound_start(sound);
     // ma.ma_sound_init_from_data_source(e.engine);
     // ma_sound_init_from_data_source(pEngine: [*c]ma_engine, pDataSource: ?*ma_data_source, flags: ma_uint32, pGroup: [*c]ma_sound_group, pSound: [*c]ma_sound)
-}
-
-fn generateSin(e: *AudioEngine) void {
-    var sine_waveform = e.allocator.create(ma.ma_waveform) catch unreachable;
-    const sine_config = ma.ma_waveform_config_init(e.engine.format, 1, e.engine.sampleRate, .ma_waveform_type_sine, 0.2, 220);
-    var res = ma.ma_waveform_init(&sine_config, sine_waveform);
-    if (res != 0) {
-        std.debug.print("error: {}\n", .{res});
-        return;
-    }
-
-    var sound = e.allocator.create(ma.ma_sound) catch unreachable;
-    const config = ma.ma_audio_buffer_config_init(.ma_format_f32, 1, 6, sine_waveform, null);
-    res = ma.ma_sound_init_from_data_source(e.engine, sine_waveform, 0, null, sound);
-    if (res != 0) {
-        std.debug.print("error: {}\n", .{res});
-        return;
-    }
-
-    _ = ma.ma_sound_start(sound);
-}
-
-fn soundWaveform(e: *AudioEngine) void {
-    var sound = Sound.initWaveform(e, .ma_waveform_type_sine, 0.5, 220) catch unreachable;
-    sound.start();
-}
-
-fn soundDataSource(e: *AudioEngine) void {
-    var ds = DataSource.create(e) catch unreachable;
-    var sound = Sound.initFromDataSource(e, ds, 0) catch unreachable;
-    sound.start();
 }
