@@ -1,10 +1,7 @@
-usingnamespace @cImport({
-    @cInclude("miniaudio.h");
-    @cInclude("miniaudio_engine.h");
-});
+usingnamespace @import("c.zig").ma;
+usingnamespace @import("sfxr.zig");
 
 const std = @import("std");
-var rng = std.rand.DefaultPrng.init(0x12345678);
 
 const LoadNotification = extern struct {
     cb: ma_async_notification_callbacks = .{ .onSignal = onSoundLoaded },
@@ -507,6 +504,33 @@ pub const Sound = extern struct {
     }
 };
 
+pub const DynamicDataSource = extern struct {
+    data_source: DataSource,
+
+    pub fn create(engine: *AudioEngine, callbacks: ma_data_source_callbacks) !*DynamicDataSource {
+        var dds = try engine.allocator.create(DynamicDataSource);
+        dds.data_source.ds = std.mem.zeroInit(ma_data_source_callbacks, callbacks);
+
+        std.debug.assert(dds.data_source.ds.onRead != null);
+        if (dds.data_source.ds.onSeek == null) dds.data_source.ds.onSeek = DataSource.onSeek;
+        if (dds.data_source.ds.onGetDataFormat == null) dds.data_source.ds.onGetDataFormat = DataSource.onGetDataFormat;
+        if (dds.data_source.ds.onGetCursor == null) dds.data_source.ds.onGetCursor = DataSource.onGetCursor;
+
+        dds.data_source.engine = engine;
+        dds.data_source.time = 0;
+        dds.data_source.advance = 1.0 / @intToFloat(f32, engine.engine.sampleRate);
+        return dds;
+    }
+
+    pub fn destroy(self: *@This()) void {
+        self.engine.allocator.destroy(self);
+    }
+
+    pub fn createSound(self: *@This()) !Sound {
+        return Sound.initFromMaDataSource(self.data_source.engine, self, 0) catch unreachable;
+    }
+};
+
 pub const DataSource = extern struct {
     ds: ma_data_source_callbacks,
     engine: *AudioEngine,
@@ -535,7 +559,6 @@ pub const DataSource = extern struct {
     }
 
     fn onRead(data_source: ?*ma_data_source, frames_out: ?*c_void, frame_count: ma_uint64, frames_read: [*c]ma_uint64) callconv(.C) ma_result {
-        std.debug.print("onRead. frame_count: {d}\n", .{frame_count});
         var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
         var out = @ptrCast([*]f32, @alignCast(@alignOf(f32), frames_out))[0..frame_count];
 
@@ -576,7 +599,6 @@ pub const DataSource = extern struct {
     }
 
     fn onGetDataFormat(data_source: ?*ma_data_source, format: [*c]ma_format, channels: [*c]ma_uint32, sample_rate: [*c]ma_uint32) callconv(.C) ma_result {
-        std.debug.print("onGetDataFormat\n", .{});
         var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
 
         format.* = base.engine.engine.format;
@@ -586,7 +608,6 @@ pub const DataSource = extern struct {
     }
 
     fn onGetCursor(data_source: ?*ma_data_source, cursor: [*c]ma_uint64) callconv(.C) ma_result {
-        std.debug.print("onGetCursor\n", .{});
         var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
         cursor.* = @floatToInt(ma_uint64, base.time / base.advance);
         return MA_SUCCESS;
