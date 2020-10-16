@@ -2,9 +2,9 @@ const builtin = @import("builtin");
 const std = @import("std");
 const Builder = std.build.Builder;
 
-// hacks. if miniaudio is compiled into the zig executable it segfaults
+// for windows we use a pre-compiled obj file
 const build_type: enum { exe, static } = .static;
-const compile_type: enum { pre_compiled, compiled } = .compiled;
+const compile_type: enum { pre_compiled, compiled } = if (std.builtin.os.tag == .windows) .pre_compiled else .compiled;
 
 pub fn build(b: *std.build.Builder) anyerror!void {
     const target = b.standardTargetOptions(.{});
@@ -56,7 +56,7 @@ pub fn build(b: *std.build.Builder) anyerror!void {
     addBuildMiniaudioObjectFile(b);
 }
 
-/// builds the miniaudio object fuile
+/// builds the miniaudio object file. On Windows, this is done manually with the x64 command prompt: `cl miniaudio.c`
 fn addBuildMiniaudioObjectFile(b: *Builder) void {
     var run_cmd = b.addSystemCommand(&[_][]const u8{ "gcc", "-c", "miniaudio.c" });
     run_cmd.cwd = "src";
@@ -85,7 +85,11 @@ pub fn linkArtifact(b: *Builder, exe: *std.build.LibExeObjStep, target: std.buil
 
     // for some reason, gcc compiled miniaudio works and zig compiled doesnt...
     if (compile_type == .pre_compiled) {
-        exe.addObjectFile("src/miniaudio.o");
+        if (target.isWindows()) {
+            exe.addObjectFile("src/miniaudio.obj");
+        } else {
+            exe.addObjectFile("src/miniaudio.o");
+        }
     } else {
         const cflags = &[_][]const u8{ "-DMA_NO_FLAC", "-DMA_NO_WEBAUDIO", "-DMA_NO_ENCODING", "-DMA_NO_NULL", "-DMA_NO_RUNTIME_LINKING" };
         exe.addCSourceFile("src/miniaudio.c", cflags);
