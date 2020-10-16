@@ -4,6 +4,7 @@ usingnamespace @cImport({
 });
 
 const std = @import("std");
+var rng = std.rand.DefaultPrng.init(0x12345678);
 
 const LoadNotification = extern struct {
     cb: ma_async_notification_callbacks = .{ .onSignal = onSoundLoaded },
@@ -202,8 +203,12 @@ pub const AudioEngine = struct {
         return Sound.initWithOptions(self, path, options);
     }
 
-    pub fn initSoundFromDataSource(self: *@This(), data_source: *ma_data_source, flags: ma_uint32) !Sound {
+    pub fn initSoundFromDataSource(self: *@This(), data_source: *DataSource, flags: ma_uint32) !Sound {
         return Sound.initFromDataSource(self, data_source, flags);
+    }
+
+    pub fn initSoundFromMaDataSource(self: *@This(), data_source: *ma_data_source, flags: ma_uint32) !Sound {
+        return Sound.initFromMaDataSource(self, data_source, flags);
     }
 };
 
@@ -304,6 +309,7 @@ pub const SoundGroup = struct {
 pub const Sound = extern struct {
     allocator: *std.mem.Allocator = undefined,
     sound: *ma_sound,
+    data_source: ?*DataSource = null,
 
     pub const LoadOptions = struct {
         stream: bool = false,
@@ -332,7 +338,21 @@ pub const Sound = extern struct {
         return errorForResult(res);
     }
 
-    pub fn initFromDataSource(engine: *AudioEngine, data_source: *ma_data_source, flags: ma_uint32) !Sound {
+    pub fn initFromDataSource(engine: *AudioEngine, data_source: *DataSource, flags: ma_uint32) !Sound {
+        var sound = try engine.allocator.create(ma_sound);
+
+        const res = ma_sound_init_from_data_source(engine.engine, data_source, flags, null, sound);
+        if (res == MA_SUCCESS) {
+            return Sound{ .allocator = engine.allocator, .sound = sound };
+        }
+
+        data_source.destroy();
+        engine.allocator.destroy(sound);
+        return errorForResult(res);
+    }
+
+    pub fn initFromMaDataSource(engine: *AudioEngine, data_source: *ma_data_source, flags: ma_uint32) !Sound {
+        // TODO: manage data_source lifecycle. it could be heap allocated i think
         var sound = try engine.allocator.create(ma_sound);
 
         const res = ma_sound_init_from_data_source(engine.engine, data_source, flags, null, sound);
@@ -345,6 +365,7 @@ pub const Sound = extern struct {
     }
 
     pub fn initWaveform(engine: *AudioEngine, waveform_type: ma_waveform_type, amplitude: f64, frequency: f64) !Sound {
+        // TODO: dont leak the ma_waveform
         var waveform = engine.allocator.create(ma_waveform) catch unreachable;
         errdefer engine.allocator.destroy(waveform);
 
@@ -355,11 +376,12 @@ pub const Sound = extern struct {
             return errorForResult(res);
         }
 
-        return engine.initSoundFromDataSource(waveform, 0);
+        return initFromMaDataSource(engine, waveform, 0);
     }
 
     pub fn deinit(self: @This()) void {
         ma_sound_uninit(self.sound);
+        if (self.data_source) |ds| ds.destroy();
         self.allocator.destroy(self.sound);
     }
 
@@ -508,20 +530,8 @@ pub const DataSource = extern struct {
         return data_source;
     }
 
-    pub fn init(engine: *AudioEngine) DataSource {
-        return .{
-            .ds = std.mem.zeroInit(ma_data_source_callbacks, .{
-                .onRead = onRead,
-                .onSeek = onSeek,
-                .onMap = null,
-                .onUnmap = null,
-                .onGetDataFormat = onGetDataFormat,
-                .onGetCursor = onGetCursor,
-                .onGetLength = null, // no length for generated audio
-            }),
-            .engine = engine,
-            .advance = 1.0 / @intToFloat(f32, engine.engine.sampleRate),
-        };
+    pub fn destroy(self: *@This()) void {
+        self.engine.allocator.destroy(self);
     }
 
     fn onRead(data_source: ?*ma_data_source, frames_out: ?*c_void, frame_count: ma_uint64, frames_read: [*c]ma_uint64) callconv(.C) ma_result {

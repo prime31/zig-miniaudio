@@ -95,15 +95,8 @@ fn soundWaveform(e: *AudioEngine) void {
 
 fn soundDataSource(e: *AudioEngine) void {
     var ds = DataSource.create(e) catch unreachable;
-
-    var sound = e.allocator.create(ma.ma_sound) catch unreachable;
-    var res = ma.ma_sound_init_from_data_source(e.engine, ds, 0, null, sound);
-    if (res != 0) {
-        std.debug.print("error: {}\n", .{res});
-        return;
-    }
-
-    _ = ma.ma_sound_start(sound);
+    var sound = Sound.initFromDataSource(e, ds, 0) catch unreachable;
+    sound.start();
 }
 
 const SfxrParams = struct {
