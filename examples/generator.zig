@@ -10,7 +10,6 @@ const DynamicDataSource = @import("miniaudio").DynamicDataSource;
 const PassThroughEffect = @import("miniaudio").PassThroughEffect;
 
 pub fn main() !void {
-    // try manualApi();
     var e = try AudioEngine.init(std.testing.allocator);
     defer e.deinit();
 
@@ -55,40 +54,4 @@ fn sfxr(preset: ma.SfxrPreset, e: *AudioEngine) void {
 
     var sound = Sound.initFromMaDataSource(e, sf, 0) catch unreachable;
     sound.start();
-}
-
-fn generate(e: *AudioEngine) void {
-    const frequency = 220.0;
-    const amplitude = 0.5;
-    const advance = 1.0 / @intToFloat(f32, e.engine.sampleRate);
-    std.debug.print("sample rate: {d}\n", .{e.engine.sampleRate});
-
-    var data = e.allocator.alloc(f32, 100000) catch unreachable;
-    var i: usize = 0;
-    var time: f32 = 0;
-    while (i < 100000) : (i += 1) {
-        data[i] = std.math.sin(std.math.tau * time * frequency) * amplitude;
-        time += advance;
-    }
-
-    var buffer = e.allocator.create(ma.ma_audio_buffer) catch unreachable;
-    // ma_audio_buffer_config_init(ma_format format, ma_uint32 channels, ma_uint64 sizeInFrames, const void* pData, const ma_allocation_callbacks* pAllocationCallbacks);
-    const config = ma.ma_audio_buffer_config_init(.ma_format_f32, 1, 100000, data.ptr, null);
-
-    var res = ma.ma_audio_buffer_init(&config, buffer);
-    if (res != 0) {
-        std.debug.print("error: {}\n", .{res});
-        return;
-    }
-
-    var sound = e.allocator.create(ma.ma_sound) catch unreachable;
-    res = ma.ma_sound_init_from_data_source(e.engine, buffer, 0, null, sound);
-    if (res != 0) {
-        std.debug.print("error: {}\n", .{res});
-        return;
-    }
-
-    _ = ma.ma_sound_start(sound);
-    // ma.ma_sound_init_from_data_source(e.engine);
-    // ma_sound_init_from_data_source(pEngine: [*c]ma_engine, pDataSource: ?*ma_data_source, flags: ma_uint32, pGroup: [*c]ma_sound_group, pSound: [*c]ma_sound)
 }

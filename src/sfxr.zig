@@ -6,7 +6,7 @@ const DataSource = @import("miniaudio.zig").DataSource;
 var rng = std.rand.DefaultPrng.init(0x12345678);
 
 fn frnd(val: f32) f32 {
-    const mod = @mod(rng.random.int(i32), @as(i32, 10001));
+    const mod = @mod(rng.random.int(i32), @as(i32, 10000));
     return @intToFloat(f32, mod) / 10000.0 * val;
 }
 
@@ -15,6 +15,16 @@ fn rnd(val: i32) i32 {
 }
 
 const pow = std.math.pow;
+
+pub const SfxrPreset = enum(u3) {
+    coin,
+    laser,
+    explosion,
+    power_up,
+    hurt,
+    jump,
+    blip,
+};
 
 pub const SfxrParams = extern struct {
     wave_type: i32 = 0,
@@ -52,10 +62,6 @@ pub const SfxrParams = extern struct {
 
     master_vol: f32 = 0.05,
     sound_vol: f32 = 0.5,
-
-    pub fn init() SfxrParams {
-        return .{};
-    }
 
     pub fn reset(self: *SfxrParams) void {
         self.* = .{};
@@ -106,8 +112,8 @@ pub const SfxrParams = extern struct {
                     self.p_pha_offset = frnd(0.2);
                     self.p_pha_ramp = -frnd(0.2);
                 }
-                if (rng.random.boolean())
-                    self.p_hpf_freq = frnd(0.3);
+                // if (rng.random.boolean())
+                self.p_hpf_freq = frnd(0.3);
             },
             .explosion => {
                 self.wave_type = 3;
@@ -298,7 +304,7 @@ pub const SfxrDataSource = extern struct {
             if (self.fltdmp > 0.8) self.fltdmp = 0.8;
             self.fltphp = 0.0;
             self.flthp = pow(f32, self.params.p_hpf_freq, 2.0) * 0.1;
-            self.flthp_d = (1.0 + self.params.p_hpf_ramp * 0.0003);
+            self.flthp_d = 1.0 + self.params.p_hpf_ramp * 0.0003;
 
             // reset vibrato
             self.vib_phase = 0.0;
@@ -320,12 +326,9 @@ pub const SfxrDataSource = extern struct {
             self.iphase = @floatToInt(i32, std.math.absFloat(self.fphase));
             self.ipp = 0;
 
-            var i: usize = 0;
-            while (i < 1024) : (i += 1) {
-                self.phaser_buffer[i] = 0;
-            }
+            std.mem.set(f32, self.phaser_buffer[0..], 0);
 
-            i = 0;
+            var i: usize = 0;
             while (i < 32) : (i += 1) {
                 self.noise_buffer[i] = frnd(2) - 1;
             }
@@ -394,27 +397,12 @@ pub const SfxrDataSource = extern struct {
                     }
                 }
             }
-            if (self.env_stage == 0) {
-                if (self.env_length[0] > 0) {
-                    self.env_vol = @intToFloat(f32, self.env_time) / @intToFloat(f32, self.env_length[0]);
-                } else {
-                    self.env_vol = 0;
-                }
-            }
-            if (self.env_stage == 1) {
-                if (self.env_length[1] > 0) {
-                    self.env_vol = 1.0 + pow(f32, 1.0 - @intToFloat(f32, self.env_time) / @intToFloat(f32, self.env_length[1]), 1.0) * 2.0 * self.params.p_env_punch;
-                } else {
-                    self.env_vol = 0;
-                }
-            }
-            if (self.env_stage == 2) {
-                if (self.env_length[2] > 0) {
-                    self.env_vol = 1.0 - @intToFloat(f32, self.env_time) / @intToFloat(f32, self.env_length[2]);
-                } else {
-                    self.env_vol = 0;
-                }
-            }
+            if (self.env_stage == 0)
+                self.env_vol = @intToFloat(f32, self.env_time) / @intToFloat(f32, self.env_length[0]);
+            if (self.env_stage == 1)
+                self.env_vol = 1.0 + pow(f32, 1.0 - @intToFloat(f32, self.env_time) / @intToFloat(f32, self.env_length[1]), 1.0) * 2.0 * self.params.p_env_punch;
+            if (self.env_stage == 2)
+                self.env_vol = 1.0 - @intToFloat(f32, self.env_time) / @intToFloat(f32, self.env_length[2]);
 
             // phaser step
             self.fphase += self.fdphase;
@@ -436,7 +424,7 @@ pub const SfxrDataSource = extern struct {
                     self.phase = @mod(self.phase, self.period);
                     if (self.params.wave_type == 3) {
                         var k: usize = 0;
-                        while (k < 32) : (k += 32) {
+                        while (k < 32) : (k += 1) {
                             self.noise_buffer[k] = frnd(2.0) - 1.0;
                         }
                     }
@@ -505,13 +493,13 @@ pub const SfxrDataSource = extern struct {
         return MA_SUCCESS;
     }
 
-    pub fn onSeek(data_source: ?*ma_data_source, frame_index: ma_uint64) callconv(.C) ma_result {
+    fn onSeek(data_source: ?*ma_data_source, frame_index: ma_uint64) callconv(.C) ma_result {
         std.debug.print("onSeek: {d}\n", .{frame_index});
         var base = @ptrCast(*SfxrDataSource, @alignCast(@alignOf(SfxrDataSource), data_source));
         return MA_SUCCESS;
     }
 
-    pub fn onGetDataFormat(data_source: ?*ma_data_source, format: [*c]ma_format, channels: [*c]ma_uint32, sample_rate: [*c]ma_uint32) callconv(.C) ma_result {
+    fn onGetDataFormat(data_source: ?*ma_data_source, format: [*c]ma_format, channels: [*c]ma_uint32, sample_rate: [*c]ma_uint32) callconv(.C) ma_result {
         var base = @ptrCast(*SfxrDataSource, @alignCast(@alignOf(SfxrDataSource), data_source));
 
         format.* = base.engine.engine.format;
@@ -519,14 +507,4 @@ pub const SfxrDataSource = extern struct {
         sample_rate.* = base.engine.engine.sampleRate;
         return MA_SUCCESS;
     }
-};
-
-pub const SfxrPreset = enum(u3) {
-    coin,
-    laser,
-    explosion,
-    power_up,
-    hurt,
-    jump,
-    blip,
 };
