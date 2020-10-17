@@ -227,7 +227,7 @@ pub const DataSource = extern struct {
         return MA_SUCCESS;
     }
 
-    pub fn onSeek(data_source: ?*ma_data_source, frame_index: ma_uint64) callconv(.C) ma_result {
+    fn onSeek(data_source: ?*ma_data_source, frame_index: ma_uint64) callconv(.C) ma_result {
         std.debug.print("onSeek: {d}\n", .{frame_index});
         var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
         return MA_SUCCESS;
@@ -245,7 +245,7 @@ pub const DataSource = extern struct {
         return MA_SUCCESS;
     }
 
-    pub fn onGetDataFormat(data_source: ?*ma_data_source, format: [*c]ma_format, channels: [*c]ma_uint32, sample_rate: [*c]ma_uint32) callconv(.C) ma_result {
+    fn onGetDataFormat(data_source: ?*ma_data_source, format: [*c]ma_format, channels: [*c]ma_uint32, sample_rate: [*c]ma_uint32) callconv(.C) ma_result {
         var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
 
         format.* = base.engine.engine.format;
@@ -254,13 +254,13 @@ pub const DataSource = extern struct {
         return MA_SUCCESS;
     }
 
-    pub fn onGetCursor(data_source: ?*ma_data_source, cursor: [*c]ma_uint64) callconv(.C) ma_result {
+    fn onGetCursor(data_source: ?*ma_data_source, cursor: [*c]ma_uint64) callconv(.C) ma_result {
         var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
         cursor.* = @floatToInt(ma_uint64, base.time / base.advance);
         return MA_SUCCESS;
     }
 
-    pub fn onGetLength(data_source: ?*ma_data_source, length: [*c]ma_uint64) callconv(.C) ma_result {
+    fn onGetLength(data_source: ?*ma_data_source, length: [*c]ma_uint64) callconv(.C) ma_result {
         std.debug.print("onGetLength\n", .{});
         var base = @ptrCast(*DataSource, @alignCast(@alignOf(DataSource), data_source));
         return MA_SUCCESS;

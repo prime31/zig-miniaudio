@@ -43,11 +43,5 @@ pub fn main() !void {
 
 fn dataCallback(device: ?*ma.ma_device, out: ?*c_void, input: ?*const c_void, frame_count: ma.ma_uint32) callconv(.C) void {
     var decoder = @intToPtr(*ma.ma_decoder, @ptrToInt(device.?.pUserData.?));
-
-    // const frames_read = ma.ma_decoder_read_pcm_frames(decoder, out, frame_count);
-    // if (frames_read < frame_count) {
-    //     std.debug.print("read: {}\n", .{frames_read});
-    //     _ = ma.ma_decoder_seek_to_pcm_frame(decoder, 0);
-    // }
     _ = ma.ma_data_source_read_pcm_frames(decoder, out, frame_count, null, 1);
 }

@@ -2,7 +2,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 const Builder = std.build.Builder;
 
-// for windows we use a pre-compiled obj file
+// for windows we use a pre-compiled obj file until we can figure out why zig cant compile miniaudio
 const build_type: enum { exe, static } = .static;
 const compile_type: enum { pre_compiled, compiled } = if (std.builtin.os.tag == .windows) .pre_compiled else .compiled;
 
@@ -10,11 +10,9 @@ pub fn build(b: *std.build.Builder) anyerror!void {
     const target = b.standardTargetOptions(.{});
 
     const examples = [_][2][]const u8{
-        [_][]const u8{ "generator", "examples/generator.zig" },
+        [_][]const u8{ "sfxr", "examples/sfxr.zig" },
         [_][]const u8{ "engine_simple", "examples/engine_simple.zig" },
         [_][]const u8{ "play_file", "examples/play_file.zig" },
-        [_][]const u8{ "mix", "examples/mix.zig" },
-        [_][]const u8{ "simple", "examples/simple.zig" },
     };
 
     for (examples) |example, i| {
@@ -59,7 +57,7 @@ pub fn build(b: *std.build.Builder) anyerror!void {
 /// builds the miniaudio object file. On Windows, this is done manually with the x64 command prompt: `cl miniaudio.c`
 fn addBuildMiniaudioObjectFile(b: *Builder) void {
     var run_cmd = b.addSystemCommand(&[_][]const u8{ "gcc", "-c", "miniaudio.c" });
-    run_cmd.cwd = "src";
+    run_cmd.cwd = "src/c_src";
     const exe_step = b.step("compile", "compiles miniaudio into an object file");
     exe_step.dependOn(&run_cmd.step);
 }
@@ -80,19 +78,18 @@ pub fn linkArtifact(b: *Builder, exe: *std.build.LibExeObjStep, target: std.buil
     }
 
     // required if doing @cImport to generate a cimport.zig file
-    exe.addIncludeDir("miniaudio/extras/miniaudio_split");
+    exe.addIncludeDir("miniaudio");
     exe.addIncludeDir("miniaudio/research");
 
-    // for some reason, gcc compiled miniaudio works and zig compiled doesnt...
     if (compile_type == .pre_compiled) {
         if (target.isWindows()) {
-            exe.addObjectFile("src/miniaudio.obj");
+            exe.addObjectFile("src/c_src/miniaudio.obj");
         } else {
-            exe.addObjectFile("src/miniaudio.o");
+            exe.addObjectFile("src/c_src/miniaudio.o");
         }
     } else {
         const cflags = &[_][]const u8{ "-DMA_NO_FLAC", "-DMA_NO_WEBAUDIO", "-DMA_NO_ENCODING", "-DMA_NO_NULL", "-DMA_NO_RUNTIME_LINKING" };
-        exe.addCSourceFile("src/miniaudio.c", cflags);
+        exe.addCSourceFile("src/c_src/miniaudio.c", cflags);
     }
 
     exe.addPackagePath("miniaudio", std.fs.path.join(b.allocator, &[_][]const u8{"src/miniaudio.zig"}) catch unreachable);

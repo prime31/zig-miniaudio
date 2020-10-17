@@ -26,7 +26,7 @@ pub const SfxrPreset = enum(u3) {
     blip,
 };
 
-pub const SfxrParams = extern struct {
+const SfxrParams = extern struct {
     wave_type: i32 = 0,
 
     p_base_freq: f32 = 0.3,
@@ -61,13 +61,13 @@ pub const SfxrParams = extern struct {
     p_arp_mod: f32 = 0,
 
     master_vol: f32 = 0.05,
-    sound_vol: f32 = 0.5,
+    sound_vol: f32 = 0.8,
 
-    pub fn reset(self: *SfxrParams) void {
+    fn reset(self: *SfxrParams) void {
         self.* = .{};
     }
 
-    pub fn loadPreset(self: *SfxrParams, preset: SfxrPreset, seed: u64) void {
+    fn loadPreset(self: *SfxrParams, preset: SfxrPreset, seed: u64) void {
         self.reset();
         rng.seed(seed);
 
@@ -266,7 +266,7 @@ pub const SfxrDataSource = extern struct {
     }
 
     pub fn destroy(self: *@This()) void {
-        self.engine.allocator.destroy(sel);
+        self.engine.allocator.destroy(self);
     }
 
     pub fn createSound(self: *@This()) !Sound {
@@ -278,7 +278,7 @@ pub const SfxrDataSource = extern struct {
         self.resetSample(true);
     }
 
-    pub fn resetSample(self: *SfxrDataSource, restart: bool) void {
+    fn resetSample(self: *SfxrDataSource, restart: bool) void {
         if (!restart)
             self.phase = 0;
         self.fperiod = 100.0 / (self.params.p_base_freq * self.params.p_base_freq + 0.001);

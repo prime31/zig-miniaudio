@@ -8,8 +8,8 @@ const Sound = @import("miniaudio").Sound;
 const PassThroughEffect = @import("miniaudio").PassThroughEffect;
 
 pub fn main() !void {
-    var e = try AudioEngine.init(std.testing.allocator);
-    defer e.deinit();
+    var e = try AudioEngine.create(std.testing.allocator);
+    defer e.destroy();
 
     std.debug.print("\nq: quit\nc: sfxr coin\nh: sfxr hurt\nj: sfxr jump\nb: sfxr blip\ne: sfxr explosion\nl: sfxr laser\np: sfxr power up\n", .{});
 

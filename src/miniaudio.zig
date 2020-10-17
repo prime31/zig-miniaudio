@@ -8,7 +8,7 @@ pub const AudioEngine = struct {
     allocator: *std.mem.Allocator = undefined,
     engine: *ma_engine,
 
-    pub fn init(allocator: *std.mem.Allocator) !AudioEngine {
+    pub fn create(allocator: *std.mem.Allocator) !AudioEngine {
         return createWithOptions(allocator, null);
     }
 
@@ -23,7 +23,7 @@ pub const AudioEngine = struct {
         return errorForResult(res);
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn destroy(self: *@This()) void {
         ma_engine_uninit(self.engine);
         self.allocator.destroy(self.engine);
     }
@@ -197,7 +197,13 @@ pub const Sound = extern struct {
         return errorForResult(res);
     }
 
-    pub fn createFromMaDataSource(engine: *AudioEngine, data_source: *ma_data_source, flags: ma_uint32) !Sound {
+    /// data_source should be an extern struct with the first field of type ma_data_source_callbacks
+    pub fn createFromMaDataSource(engine: *AudioEngine, data_source: anytype, flags: ma_uint32) !Sound {
+        comptime {
+            var first_field = std.meta.fields(std.meta.Child(@TypeOf(data_source)))[0];
+            std.debug.assert(first_field.field_type == ma_data_source_callbacks);
+        }
+
         // TODO: dont leak the data_source
         var sound = try engine.allocator.create(ma_sound);
 
