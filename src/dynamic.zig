@@ -174,7 +174,7 @@ pub const DynamicDataSource = extern struct {
     }
 
     pub fn createSound(self: *@This()) !Sound {
-        return Sound.createFromMaDataSource(self.data_source.engine, self, 0) catch unreachable;
+        return Sound.createFromDataSource(self.data_source.engine, self, 0) catch unreachable;
     }
 };
 

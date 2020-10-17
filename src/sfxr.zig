@@ -270,7 +270,7 @@ pub const SfxrDataSource = extern struct {
     }
 
     pub fn createSound(self: *@This()) !Sound {
-        return Sound.createFromMaDataSource(self.engine, self, 0) catch unreachable;
+        return Sound.createFromDataSource(self.engine, self, 0) catch unreachable;
     }
 
     pub fn loadPreset(self: *@This(), preset: SfxrPreset, seed: u64) void {

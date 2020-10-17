@@ -51,12 +51,12 @@ pub const AudioEngine = struct {
         return errorForResult(res);
     }
 
-    pub fn initSoundGroup(self: *@This()) !SoundGroup {
-        return SoundGroup.init(self);
+    pub fn createSoundGroup(self: *@This()) !SoundGroup {
+        return SoundGroup.create(self);
     }
 
-    pub fn initSoundGroupWithParent(self: *@This(), parent: SoundGroup) !SoundGroup {
-        return SoundGroup.initWithParent(self, parent);
+    pub fn createSoundGroupWithParent(self: *@This(), parent: SoundGroup) !SoundGroup {
+        return SoundGroup.createWithParent(self, parent);
     }
 
     pub fn createSound(self: *@This(), path: [*c]const u8) !Sound {
@@ -67,8 +67,8 @@ pub const AudioEngine = struct {
         return Sound.createWithOptions(self, path, options);
     }
 
-    pub fn createSoundFromMaDataSource(self: *@This(), data_source: *ma_data_source, flags: ma_uint32) !Sound {
-        return Sound.createFromMaDataSource(self, data_source, flags);
+    pub fn createSoundFromDataSource(self: *@This(), data_source: *ma_data_source, flags: ma_uint32) !Sound {
+        return Sound.createFromDataSource(self, data_source, flags);
     }
 };
 
@@ -76,7 +76,7 @@ pub const SoundGroup = struct {
     allocator: *std.mem.Allocator = undefined,
     group: *ma_sound_group,
 
-    pub fn init(engine: *AudioEngine) !SoundGroup {
+    pub fn create(engine: *AudioEngine) !SoundGroup {
         var group = try engine.allocator.create(ma_sound_group);
 
         const res = ma_sound_group_init(engine.engine, null, group);
@@ -87,7 +87,7 @@ pub const SoundGroup = struct {
         return errorForResult(res);
     }
 
-    pub fn initWithParent(engine: *AudioEngine, parent: SoundGroup) !SoundGroup {
+    pub fn createWithParent(engine: *AudioEngine, parent: SoundGroup) !SoundGroup {
         var group = try engine.allocator.create(ma_sound_group);
 
         const res = ma_sound_group_init(engine.engine, parent.group, group);
@@ -98,7 +98,7 @@ pub const SoundGroup = struct {
         return errorForResult(res);
     }
 
-    pub fn deinit(self: *@This()) void {
+    pub fn destroy(self: *@This()) void {
         ma_sound_group_uninit(self.group);
         self.allocator.destroy(self.group);
     }
@@ -198,7 +198,7 @@ pub const Sound = extern struct {
     }
 
     /// data_source should be an extern struct with the first field of type ma_data_source_callbacks
-    pub fn createFromMaDataSource(engine: *AudioEngine, data_source: anytype, flags: ma_uint32) !Sound {
+    pub fn createFromDataSource(engine: *AudioEngine, data_source: anytype, flags: ma_uint32) !Sound {
         comptime {
             var first_field = std.meta.fields(std.meta.Child(@TypeOf(data_source)))[0];
             std.debug.assert(first_field.field_type == ma_data_source_callbacks);
@@ -228,7 +228,7 @@ pub const Sound = extern struct {
             return errorForResult(res);
         }
 
-        return createFromMaDataSource(engine, waveform, 0);
+        return createFromDataSource(engine, waveform, 0);
     }
 
     pub fn destroy(self: @This()) void {
