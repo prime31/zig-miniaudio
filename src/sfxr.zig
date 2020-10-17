@@ -1,17 +1,17 @@
 const std = @import("std");
 usingnamespace @import("c.zig").ma;
+
 const AudioEngine = @import("miniaudio.zig").AudioEngine;
-const DataSource = @import("miniaudio.zig").DataSource;
+const Sound = @import("miniaudio.zig").Sound;
 
 var rng = std.rand.DefaultPrng.init(0x12345678);
 
-fn frnd(val: f32) f32 {
-    const mod = @mod(rng.random.int(i32), @as(i32, 10000));
-    return @intToFloat(f32, mod) / 10000.0 * val;
+fn rnd(val: i32) i32 {
+    return @mod(rng.random.int(i32), val + 1);
 }
 
-fn rnd(val: i32) i32 {
-    return @mod(rng.random.int(i32), (val + 1));
+fn frnd(range: f32) f32 {
+    return @intToFloat(f32, rnd(10000)) / 10000.0 * range;
 }
 
 const pow = std.math.pow;
@@ -270,7 +270,12 @@ pub const SfxrDataSource = extern struct {
     }
 
     pub fn createSound(self: *@This()) !Sound {
-        return Sound.initFromMaDataSource(self.data_source.engine, self, 0) catch unreachable;
+        return Sound.createFromMaDataSource(self.engine, self, 0) catch unreachable;
+    }
+
+    pub fn loadPreset(self: *@This(), preset: SfxrPreset, seed: u64) void {
+        self.params.loadPreset(preset, seed);
+        self.resetSample(true);
     }
 
     pub fn resetSample(self: *SfxrDataSource, restart: bool) void {
@@ -432,7 +437,6 @@ pub const SfxrDataSource = extern struct {
 
                 // base waveform
                 var fp = @intToFloat(f32, self.phase) / @intToFloat(f32, self.period);
-
                 switch (self.params.wave_type) {
                     0 => {
                         // square

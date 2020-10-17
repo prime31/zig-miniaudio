@@ -19,19 +19,19 @@ pub fn main() !void {
     var grp = try e.initSoundGroup();
     defer grp.deinit();
 
-    var sndo = try e.initSoundWithOptions("examples/assets/clang-beat.wav", .{
+    var sndo = try e.createSoundWithOptions("examples/assets/clang-beat.wav", .{
         .stream = true,
         .group = grp,
     });
-    defer sndo.deinit();
+    defer sndo.destroy();
     sndo.setFadePointInMilliseconds(0, 0, 0.3, 0, 1000);
     sndo.start();
 
     std.debug.print("group. playing: {}, volume: {}, time: {}\n", .{ grp.isPlaying(), grp.getVolume(), grp.getTimeInFrames() });
 
-    var snd = try e.initSound("examples/assets/loop.wav");
+    var snd = try e.createSound("examples/assets/loop.wav");
     std.debug.print("sync time: {d}\n", .{ snd.getLength() });
-    defer snd.deinit();
+    defer snd.destroy();
     snd.setLooping(true);
     snd.start();
 
@@ -45,7 +45,7 @@ pub fn main() !void {
         c = try stdin.readBytesNoEof(1);
         switch (c[0]) {
             'm' => {
-                var mus = try e.initSoundWithOptions("examples/assets/clearday.mp3", .{
+                var mus = try e.createSoundWithOptions("examples/assets/clearday.mp3", .{
                     .stream = true,
                 });
                 mus.setFadePointInMilliseconds(0, 0, 0.3, 0, 1000);
