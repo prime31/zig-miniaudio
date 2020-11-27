@@ -302,7 +302,8 @@ pub const Sound = extern struct {
     }
 
     pub fn setFadePointInMilliseconds(self: *@This(), fade_point_index: c_uint, volume_beg: f32, volume_end: f32, time_in_ms_beg: c_ulonglong, time_in_ms_end: c_ulonglong) void {
-        _ = ma_sound_set_fade_point_in_milliseconds(self.sound, fade_point_index, volume_beg, volume_end, time_in_ms_beg, time_in_ms_end);
+        std.debug.print("TODO: fix setFadePointInMilliseconds\n", .{});
+        // _ = ma_sound_set_fade_point_in_milliseconds(self.sound, fade_point_index, volume_beg, volume_end, time_in_ms_beg, time_in_ms_end);
     }
 
     /// Enables fading around loop transitions when false

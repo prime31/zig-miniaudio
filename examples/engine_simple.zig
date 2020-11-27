@@ -9,13 +9,13 @@ const PassThroughEffect = @import("miniaudio").PassThroughEffect;
 
 pub fn main() !void {
     var e = try AudioEngine.create(std.testing.allocator);
-    defer e.deinit();
+    defer e.destroy();
 
     e.setVolume(0.15);
     try e.playOneShot("examples/assets/clang.wav");
 
-    var grp = try e.initSoundGroup();
-    defer grp.deinit();
+    var grp = try e.createSoundGroup();
+    defer grp.destroy();
 
     var sndo = try e.createSoundWithOptions("examples/assets/clang-beat.wav", .{
         .stream = true,

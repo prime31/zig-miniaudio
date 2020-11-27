@@ -63,8 +63,7 @@ pub const PassThroughEffect = extern struct {
     /// On output you need to set it to how many input frames were actually consumed.
     /// On input, outputFrameCount is the capacity of the output buffer.
     /// On output you need to set it to how many output frames were actually output.
-    fn onProcessPCMFrames(effect: ?*ma_effect, frames_in: ?*const c_void, frame_count_in: [*c]ma_uint64, frames_out: ?*c_void, frame_count_out: [*c]ma_uint64) callconv(.C) ma_result {
-        std.debug.print("onProcessPCMFrames\n", .{});
+    fn onProcessPCMFrames(effect: ?*ma_effect, input_stream_count: ma_uint32, frames_in: [*c]?*const c_void, frame_count_in: [*c]ma_uint64, frames_out: ?*c_void, frame_count_out: [*c]ma_uint64) callconv(.C) ma_result {
         var base = @ptrCast(*PassThroughEffect, @alignCast(@alignOf(PassThroughEffect), effect));
 
         const frame_count: ma_uint64 = std.math.min(frame_count_in.*, frame_count_out.*);
