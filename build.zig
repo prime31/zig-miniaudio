@@ -10,7 +10,7 @@ pub fn build(b: *std.build.Builder) anyerror!void {
     const target = b.standardTargetOptions(.{});
 
     // use a different cache folder for macos arm builds
-    b.cache_root = if (std.builtin.os.tag == .macos and std.builtin.arch == std.builtin.Arch.aarch64) "zig-arm-cache/bin" else "zig-cache/bin";
+    b.cache_root = if (std.builtin.os.tag == .macos and std.builtin.arch == std.builtin.Arch.aarch64) "zig-arm-cache" else "zig-cache";
 
     const examples = [_][2][]const u8{
         [_][]const u8{ "sfxr", "examples/sfxr.zig" },
