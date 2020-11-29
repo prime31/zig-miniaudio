@@ -6,7 +6,7 @@ const std = @import("std");
 // - same exact thing for effects
 // - same exact thing for async load notifications
 //
-// the challenge is really just object lifecylce. Subobjects need to be allocated somewhere and have their lifecycle managed
+// the challenge is really just object lifecycle. Sub-objects need to be allocated somewhere and have their lifecycle managed
 // (ex DataSource stored in the DataSource implementer like the Allocator interface). When DataSource is destroyed it needs
 // to destroy the implementer.
 

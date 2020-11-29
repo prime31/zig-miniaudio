@@ -3,7 +3,7 @@ const std = @import("std");
 const Builder = std.build.Builder;
 
 // for windows we use a pre-compiled obj file until we can figure out why zig cant compile miniaudio
-const build_type: enum { exe, static } = .static;
+const build_type: enum { exe, static } = .exe;
 const compile_type: enum { pre_compiled, compiled } = if (std.builtin.os.tag == .windows) .pre_compiled else .compiled;
 
 pub fn build(b: *std.build.Builder) anyerror!void {
@@ -22,52 +22,53 @@ pub fn build(b: *std.build.Builder) anyerror!void {
         const name = example[0];
         const source = example[1];
 
-        var exe = b.addExecutable(name, source);
-        exe.setBuildMode(b.standardReleaseOptions());
-        exe.setOutputDir(std.fs.path.joinPosix(b.allocator, &[_][]const u8{ b.cache_root, "bin" }) catch unreachable);
-
-        if (build_type == .static) {
-            const lib = b.addStaticLibrary("miniaudio", null);
-            lib.setBuildMode(std.builtin.Mode.ReleaseSmall);
-            lib.setTarget(target);
-
-            linkArtifact(b, lib, target);
-            lib.install();
-
-            exe.linkLibrary(lib);
-
-            exe.addIncludeDir("miniaudio/extras/miniaudio_split");
-            exe.addIncludeDir("miniaudio/research");
-            exe.addPackagePath("miniaudio", std.fs.path.join(b.allocator, &[_][]const u8{"src/miniaudio.zig"}) catch unreachable);
-        } else {
-            linkArtifact(b, exe, target);
-        }
-
-        const run_cmd = exe.run();
-        const exe_step = b.step(name, b.fmt("run {}.zig", .{name}));
-        exe_step.dependOn(&run_cmd.step);
+        createExe(b, target, name, source);
 
         // first element in the list is added as "run" so "zig build run" works
-        if (i == 0) {
-            const run_exe_step = b.step("run", b.fmt("run {}.zig", .{name}));
-            run_exe_step.dependOn(&run_cmd.step);
-        }
+        if (i == 0) createExe(b, target, "run", source);
     }
-
-    addBuildMiniaudioObjectFile(b);
 }
 
-/// builds the miniaudio object file. On Windows, this is done manually with the x64 command prompt: `cl miniaudio.c`
-fn addBuildMiniaudioObjectFile(b: *Builder) void {
-    var run_cmd = b.addSystemCommand(&[_][]const u8{ "gcc", "-c", "miniaudio.c" });
-    run_cmd.cwd = "src/c_src";
-    const exe_step = b.step("compile", "compiles miniaudio into an object file");
+fn createExe(b: *Builder, target: std.build.Target, name: []const u8, source: []const u8) void {
+    var exe = b.addExecutable(name, source);
+    exe.setBuildMode(b.standardReleaseOptions());
+    exe.setOutputDir(std.fs.path.joinPosix(b.allocator, &[_][]const u8{ b.cache_root, "bin" }) catch unreachable);
+
+    addMiniaudioToArtifact(b, exe, target, "");
+
+    const run_cmd = exe.run();
+    const exe_step = b.step(name, b.fmt("run {}.zig", .{name}));
     exe_step.dependOn(&run_cmd.step);
 }
 
-pub fn linkArtifact(b: *Builder, exe: *std.build.LibExeObjStep, target: std.build.Target) void {
-    exe.linkLibC();
+/// prefix_path is the path to the gfx build.zig file relative to your build.zig.
+/// prefix_path is used to add package paths. It should be the the same path used to include this build file.
+pub fn addMiniaudioToArtifact(b: *Builder, exe: *std.build.LibExeObjStep, target: std.build.Target, comptime prefix_path: []const u8) void {
+    // we either compile miniaudio right into the exe or to a static lib first. Preferably, exe will work on all platforms at some point.
+    if (build_type == .static) {
+        const lib = b.addStaticLibrary("miniaudio", null);
+        lib.setBuildMode(std.builtin.Mode.ReleaseSmall);
+        lib.setTarget(target);
 
+        linkArtifact(b, lib, target, prefix_path);
+        lib.install();
+
+        exe.linkLibrary(lib);
+
+        exe.addIncludeDir(prefix_path ++ "miniaudio/extras/miniaudio_split");
+        exe.addIncludeDir(prefix_path ++ "miniaudio/research");
+        exe.addPackagePath("miniaudio", prefix_path ++ "src/miniaudio.zig");
+    } else {
+        linkArtifact(b, exe, target, prefix_path);
+    }
+
+    addBuildMiniaudioObjectFile(b, prefix_path);
+}
+
+pub fn linkArtifact(b: *Builder, exe: *std.build.LibExeObjStep, target: std.build.Target, comptime prefix_path: []const u8) void {
+    if (prefix_path.len > 0 and !std.mem.endsWith(u8, prefix_path, "/")) @panic("prefix-path must end with '/' if it is not empty");
+
+    exe.linkLibC();
     if (target.isDarwin()) {
         const frameworks_dir = macosFrameworksDir(b) catch unreachable;
         exe.addFrameworkDir(frameworks_dir);
@@ -81,21 +82,30 @@ pub fn linkArtifact(b: *Builder, exe: *std.build.LibExeObjStep, target: std.buil
     }
 
     // required if doing @cImport to generate a cimport.zig file
-    exe.addIncludeDir("miniaudio");
-    exe.addIncludeDir("miniaudio/research");
+    exe.addIncludeDir(prefix_path ++ "miniaudio");
+    exe.addIncludeDir(prefix_path ++ "miniaudio/research");
 
+    // windows requires a precompiled obj file until zig can build it
     if (compile_type == .pre_compiled) {
         if (target.isWindows()) {
-            exe.addObjectFile("src/c_src/miniaudio.obj");
+            exe.addObjectFile(prefix_path ++ "src/c_src/miniaudio.obj");
         } else {
-            exe.addObjectFile("src/c_src/miniaudio.o");
+            exe.addObjectFile(prefix_path ++ "src/c_src/miniaudio.o");
         }
     } else {
         const cflags = &[_][]const u8{ "-DMA_NO_FLAC", "-DMA_NO_WEBAUDIO", "-DMA_NO_ENCODING", "-DMA_NO_NULL", "-DMA_NO_RUNTIME_LINKING" };
-        exe.addCSourceFile("src/c_src/miniaudio.c", cflags);
+        exe.addCSourceFile(prefix_path ++ "src/c_src/miniaudio.c", cflags);
     }
 
-    exe.addPackagePath("miniaudio", std.fs.path.join(b.allocator, &[_][]const u8{"src/miniaudio.zig"}) catch unreachable);
+    exe.addPackagePath("miniaudio", prefix_path ++ "src/miniaudio.zig");
+}
+
+/// builds the miniaudio object file. On Windows, this is done manually with the x64 command prompt: `cl miniaudio.c`
+fn addBuildMiniaudioObjectFile(b: *Builder, comptime prefix_path: []const u8) void {
+    var run_cmd = b.addSystemCommand(&[_][]const u8{ "gcc", "-c", "miniaudio.c" });
+    run_cmd.cwd = prefix_path ++ "src/c_src";
+    const exe_step = b.step("compile-miniaudio", "compiles miniaudio into an object file");
+    exe_step.dependOn(&run_cmd.step);
 }
 
 /// helper function to get SDK path on Mac
